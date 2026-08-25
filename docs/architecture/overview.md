@@ -1,0 +1,94 @@
+# Architecture Overview
+
+See also: [product spec](../product-spec.md) · [core loop](../core-loop.md) · [data model](./data-model.md) · [accessibility](../accessibility.md) · [testing strategy](../testing-strategy.md) · [ADR index](../adr/README.md)
+
+## Technology stack
+
+Use Vite, React, and TypeScript. V1 has no backend; all session state is held
+in memory. The deployment target remains deferred.
+
+## Simulation core and React shell
+
+The simulation core (`src/sim/`) is plain TypeScript with no React or DOM
+dependencies. It owns the controlled clock, seeded RNG, schedule policy,
+creature learning model, event classification, immutable snapshots, and
+summary derivation.
+
+Its public API is intentionally small:
+
+```ts
+createSession(options: { seed?: string; speed?: 0.5 | 1; config?: Partial<SimConfig> }): SimSession
+presentNextPair(): void
+recordObservedSelection(stimulusId: string | null): void
+startRound(round: 'baseline' | 'crf' | 'vr' | 'extinction'): void
+deliverStimulus(stimulusId: string): void
+tick(realDtMs: number): void
+setPaused(paused: boolean): void
+setSpeed(speed: 0.5 | 1): void
+getSnapshot(): SessionState
+subscribe(listener: () => void): () => void
+```
+
+Commands do not accept or expose mutable creature state. `deliverStimulus`
+classifies the delivery against the current response and schedule criterion;
+the generated event contains the associated `responseId` when one exists. The
+`config` option exists for tests and fixtures only; the React shell always
+constructs a session with the
+[configuration constants](./data-model.md#6-configuration-constants) defaults.
+
+The React shell (`src/app/`) uses `useSyncExternalStore` through a
+`useSimState()` bridge. Components render snapshots and send commands; no
+simulation rule lives in a hook or component.
+
+Browser visibility changes automatically pause the controlled simulation
+clock. `tick` receives elapsed wall-clock time; the core caps unexpected
+deltas and applies the selected speed to produce simulated time. Returning to
+a backgrounded tab therefore cannot silently advance an entire round.
+
+The UI owns `mode: 'simple' | 'advanced'`; mode never changes sim behavior.
+Accessibility speed is different: it is an explicit sim input because it
+changes simulated timing windows in a controlled, testable way.
+
+Command validity and the separation between what a response makes eligible
+and what the creature actually experiences follow the invariant described in
+[ADR 0003: eligibility vs. experienced consequences invariant](../adr/0003-eligibility-vs-experienced-consequences-invariant.md).
+
+## Screens
+
+- **AppShell:** owns the sim instance, mode toggle, accessibility controls,
+  and screen navigation.
+- **OnboardingScreen:** states learning goals and educational boundaries.
+- **AssessmentScreen:** presents pairs, animates selection, records the
+  player's observation, and shows the preference hierarchy.
+- **TrainingScreen:** contains baseline/CRF/VR/extinction subphases, schedule
+  coaching, stimulus delivery, creature animation, and progress. Advanced mode
+  adds the live cumulative record and event log.
+- **DebriefScreen:** renders Simple or Advanced views from a single session
+  summary object.
+
+## Graphing
+
+Use visx for rendering, behind project-owned chart-data and chart-view
+interfaces so debrief logic is not coupled to the library.
+
+The primary schedule visualization is a cumulative response record: time on
+the x-axis, cumulative responses on the y-axis, and stimulus
+deliveries/event annotations overlaid. Slope communicates response rate more
+legibly in a short session than a noisy raw-rate line. Advanced mode also
+shows derived response rate by round and the underlying accessible event
+table. See the [derived metrics](./data-model.md) section of the data model
+for how these values are computed from the event log.
+
+Visx preserves flexibility for a future Standard Celeration Chart, but v1
+does not implement or partially emulate that chart.
+
+## Error handling and illegal states
+
+Prefer discriminated unions and phase-specific commands so illegal states are
+unrepresentable where practical. Commands issued in the wrong phase return a
+typed result and append no partial event — see the
+[SimEvent union](./data-model.md) in the data model for the event shapes this
+protects. The UI prevents duplicate starts and explains unavailable actions.
+Unexpected UI errors show a recoverable restart option; because v1 has no
+persistence, restarting clearly states that the current session will be
+lost.
