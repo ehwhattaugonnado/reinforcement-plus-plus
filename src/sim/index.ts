@@ -54,3 +54,18 @@ export type {
   SessionState,
   SimSession,
 } from './types'
+export {
+  detectExtinctionBurst,
+  evaluateReinforcerEvidence,
+  type BurstCheck,
+  type BurstDetectionResult,
+  type BurstNotEvaluableReason,
+  type BurstThresholds,
+  type PromptContingentDeliveryCounts,
+  type RateComparison,
+  type RateSample,
+  type ReinforcerEvidenceCheck,
+  type ReinforcerEvidenceNotEvaluableReason,
+  type ReinforcerEvidenceResult,
+  type ReinforcerEvidenceThresholds,
+} from './evidence'
