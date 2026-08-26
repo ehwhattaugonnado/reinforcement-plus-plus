@@ -8,7 +8,16 @@ import AxeBuilder from '@axe-core/playwright'
  * The full required path (onboarding -> assessment -> baseline -> CRF -> VR ->
  * debrief), mode switching, background pausing, reduced motion, and the
  * accessible chart alternatives are added in Milestone 8.
+ *
+ * The assessment screen adds its own `role="status"` regions from Milestone 2
+ * on, so a bare `getByRole('status')` is ambiguous. These tests care about
+ * the session-level pause/speed announcement specifically, so they scope to
+ * its `.session-status` class, matching the unit test's `sessionStatus()`
+ * helper.
  */
+function sessionStatus(page: import('@playwright/test').Page) {
+  return page.locator('.session-status')
+}
 test('the shell loads and states its educational boundary', async ({
   page,
 }) => {
@@ -25,10 +34,10 @@ test('pause and speed are operable and announced textually', async ({
   await page.goto('/')
 
   await page.getByRole('button', { name: /pause/i }).click()
-  await expect(page.getByRole('status')).toContainText(/paused/i)
+  await expect(sessionStatus(page)).toContainText(/paused/i)
 
   await page.getByRole('radio', { name: '0.5×' }).check()
-  await expect(page.getByRole('status')).toContainText('0.5')
+  await expect(sessionStatus(page)).toContainText('0.5')
 })
 
 test('the shell is keyboard operable', async ({ page }) => {
@@ -36,7 +45,7 @@ test('the shell is keyboard operable', async ({ page }) => {
   await page.keyboard.press('Tab')
   await expect(page.getByRole('button', { name: /pause/i })).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('status')).toContainText(/paused/i)
+  await expect(sessionStatus(page)).toContainText(/paused/i)
 })
 
 test('has no automatically detectable accessibility violations', async ({

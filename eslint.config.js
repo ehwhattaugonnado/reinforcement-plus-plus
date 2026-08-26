@@ -89,6 +89,26 @@ export default tseslint.config(
     },
   },
   {
+    // ADR 0007: visx is isolated behind the chart-view layer. Everywhere else
+    // in the React shell consumes project-owned chart-data instead.
+    files: ['src/app/**/*.{ts,tsx}'],
+    ignores: ['src/app/charts/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@visx/*'],
+              message:
+                'Only src/app/charts/ may import visx directly (ADR 0007).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['src/**/*.test.{ts,tsx}', 'tests/**/*.ts', '*.config.{ts,js}'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
