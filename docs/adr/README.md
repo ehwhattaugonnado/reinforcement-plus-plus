@@ -13,3 +13,5 @@ See also: [../architecture/overview.md](../architecture/overview.md), [../archit
 | 0005 | [Speed as a simulation input](0005-speed-as-simulation-input.md) | Playback speed is a first-class simulation field and command, with timing windows fixed in simulated time so 0.5x carries no scoring penalty or bonus. |
 | 0006 | [No v1 persistence](0006-no-v1-persistence.md) | v1 has no storage layer of any kind — no localStorage, no backend, no cross-session save; every session starts fresh. |
 | 0007 | [visx behind adapter interfaces](0007-visx-behind-adapter-interfaces.md) | Charting uses visx, but only behind project-owned `chart-data`/`chart-view` interfaces so debrief logic stays decoupled from the charting library. |
+| 0008 | [Typed command results](0008-typed-command-results.md) | Every simulation command returns a discriminated `CommandResult`; rejections are atomic, append no events, and consume no RNG draws. |
+| 0009 | [Replay config resolution](0009-replay-config-resolution.md) | Replay applies either an explicitly supplied config or the current defaults, rejecting any log whose `configVersion` does not match; there is no historical registry. |

@@ -18,16 +18,27 @@ Its public API is intentionally small:
 
 ```ts
 createSession(options: { seed?: string; speed?: 0.5 | 1; config?: Partial<SimConfig> }): SimSession
-presentNextPair(): void
-recordObservedSelection(stimulusId: string | null): void
-startRound(round: 'baseline' | 'crf' | 'vr' | 'extinction'): void
-deliverStimulus(stimulusId: string): void
-tick(realDtMs: number): void
-setPaused(paused: boolean): void
-setSpeed(speed: 0.5 | 1): void
+replay(seed: string, events: readonly SimEvent[], config?: Partial<SimConfig>): ReplayResult
+
+presentNextPair(): CommandResult
+recordObservedSelection(stimulusId: string | null): CommandResult
+startRound(round: 'baseline' | 'crf' | 'vr' | 'extinction'): CommandResult
+deliverStimulus(stimulusId: string): CommandResult
+tick(realDtMs: number): CommandResult
+setPaused(paused: boolean): CommandResult
+setSpeed(speed: 0.5 | 1): CommandResult
 getSnapshot(): SessionState
 subscribe(listener: () => void): () => void
 ```
+
+Every command returns a discriminated `CommandResult`. A rejected command
+appends no events, mutates no state, notifies no subscribers, and consumes no
+RNG draws, so a rejection can never perturb deterministic replay. See
+[ADR 0008: typed command results](../adr/0008-typed-command-results.md) for the
+result and rejection-reason shapes. `replay` resolves the `SimConfig` for a log
+under the rules in
+[ADR 0009: replay config resolution](../adr/0009-replay-config-resolution.md),
+reconstructing state as of the last recorded event.
 
 Commands do not accept or expose mutable creature state. `deliverStimulus`
 classifies the delivery against the current response and schedule criterion;
@@ -86,7 +97,8 @@ does not implement or partially emulate that chart.
 
 Prefer discriminated unions and phase-specific commands so illegal states are
 unrepresentable where practical. Commands issued in the wrong phase return a
-typed result and append no partial event — see the
+typed `CommandResult` rejection ([ADR 0008](../adr/0008-typed-command-results.md))
+and append no partial event — see the
 [SimEvent union](./data-model.md) in the data model for the event shapes this
 protects. The UI prevents duplicate starts and explains unavailable actions.
 Unexpected UI errors show a recoverable restart option; because v1 has no
