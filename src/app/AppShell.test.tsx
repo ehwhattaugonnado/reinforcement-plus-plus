@@ -58,4 +58,26 @@ describe('AppShell', () => {
     const { container } = render(<AppShell seed="shell-test" />)
     await expectNoAxeViolations(container)
   })
+
+  it('has no automatically detectable accessibility violations in the training phase', async () => {
+    // The Milestone 0 axe check above only ever exercised the assessment
+    // phase (the phase every fresh session starts in). TrainingScreen has
+    // its own heading and status structure, and nothing had driven a
+    // session there in a browser-like environment before this test existed.
+    const user = userEvent.setup()
+    const { container } = render(<AppShell seed="training-phase-axe-test" />)
+
+    for (let trial = 0; trial < 6; trial++) {
+      await user.click(screen.getByRole('button', { name: /show next pair/i }))
+      await user.click(screen.getByRole('button', { name: /neither/i }))
+    }
+    await user.click(
+      screen.getByRole('button', { name: /continue to training/i }),
+    )
+
+    expect(
+      screen.getByRole('heading', { name: /training/i }),
+    ).toBeInTheDocument()
+    await expectNoAxeViolations(container)
+  })
 })

@@ -315,6 +315,8 @@ A milestone is complete only when:
 | Learner-facing copy | Small wording errors can collapse preferred stimulus into reinforcer or overstate extinction outcomes. | Draft with each slice; SME gate before public release |
 | Accessibility under live timing | Announcements, focus behavior, and large controls must remain usable without changing scoring semantics. | Test in every timed slice, not only at release |
 | Probabilistic expectations | Idealized response curves and bursts must not be required for every seed. | Document cohort and tolerances by Milestone 6 |
+| `nowMs` wiring for live charts | `buildCumulativeRecordChartData` and `buildResponseRateChartData` (Milestone 7) default their time extent to the latest logged event; a live, still-open round left idle understates its own duration and so overstates its displayed rate unless the caller passes `state.elapsedSimMs` explicitly. Nothing is wired into `AppShell` yet, so nothing is wrong today, but the debrief/live-training wiring must not skip this argument. | Milestone 7 UI wiring / Milestone 8 hardening |
+| Extinction-transition state | Milestone 3's learning model does not separately model the "extinction-transition state" listed as a rate input in the data model (§4); it assumes the existing recency-decay term already produces the post-cessation decline Milestone 6's burst detector needs. Milestone 6's detector is tested only against hand-constructed logs, so this assumption is unfalsified — no test yet connects a live extinction round's actual output to the detector. | Milestone 6 behavior-model half / verify before Milestone 8 |
 
 ## 7. Recommended First Implementation Increment
 

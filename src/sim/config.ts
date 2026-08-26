@@ -157,7 +157,7 @@ export const DEFAULT_SIM_CONFIG: SimConfig = {
  *
  * See ADR 0009.
  */
-export const CONFIG_VERSION = 'v1.1.0'
+export const CONFIG_VERSION = 'v1.2.0'
 
 /** Marks a log produced under a test override so it can never replay as default. */
 export const OVERRIDE_CONFIG_VERSION = `${CONFIG_VERSION}+override`
