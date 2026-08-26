@@ -4,7 +4,7 @@
 **Date:** 2026-08-25
 **Repo:** https://github.com/ehwhattaugonnado/reinforcement-plus-plus
 
-See also: [Core Loop](core-loop.md) · [Architecture Overview](architecture/overview.md) · [ADR index](adr/README.md) · [ABA Concept Glossary](aba-glossary.md)
+See also: [Implementation Roadmap](roadmap.md) · [Core Loop](core-loop.md) · [Architecture Overview](architecture/overview.md) · [ADR index](adr/README.md) · [ABA Concept Glossary](aba-glossary.md)
 
 ## 1. Concept Summary
 
