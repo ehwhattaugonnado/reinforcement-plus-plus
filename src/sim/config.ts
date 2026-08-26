@@ -9,6 +9,25 @@
  */
 
 export type SimConfig = {
+  /**
+   * Exponent on current stimulus value in the paired-stimulus choice rule.
+   * Higher values sharpen discrimination between the two offered stimuli.
+   */
+  assessmentChoiceSensitivity: number
+  /**
+   * Peak probability that the creature approaches neither stimulus, reached
+   * when both items in the pair have no value left. Scales with
+   * `1 - highest current value in the pair`.
+   */
+  assessmentNoSelectionScale: number
+  /** Proportional value lost from one period of post-selection access. */
+  assessmentSatiationPerAccess: number
+  /**
+   * Floor on a satiated stimulus, as a fraction of its `basePreference`. This
+   * is what bounds satiation so trial order cannot dominate the hierarchy.
+   */
+  assessmentSatiationFloorFraction: number
+
   /** Window after a response within which a delivery is classified `prompt`. */
   promptDeliveryWindowMs: number
   /** How long reinforcement stays due before the cycle is abandoned. */
@@ -43,6 +62,11 @@ export type SimConfig = {
 }
 
 export const DEFAULT_SIM_CONFIG: SimConfig = {
+  assessmentChoiceSensitivity: 4,
+  assessmentNoSelectionScale: 0.15,
+  assessmentSatiationPerAccess: 0.05,
+  assessmentSatiationFloorFraction: 0.85,
+
   promptDeliveryWindowMs: 1500,
   reinforcementDueWindowMs: 10000,
   baselineDurationMs: 45000,
@@ -79,7 +103,7 @@ export const DEFAULT_SIM_CONFIG: SimConfig = {
  *
  * See ADR 0009.
  */
-export const CONFIG_VERSION = 'v1.0.0'
+export const CONFIG_VERSION = 'v1.1.0'
 
 /** Marks a log produced under a test override so it can never replay as default. */
 export const OVERRIDE_CONFIG_VERSION = `${CONFIG_VERSION}+override`

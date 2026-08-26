@@ -107,6 +107,14 @@ exceptions. `configVersion` identifies the `SimConfig` constants (Section 6) a
 log was produced under, so an old log is never silently reinterpreted under
 new thresholds.
 
+The creature's choice for a presented pair (Core Loop, Phase A) is decided in
+the command handler, drawing only from the seeded behavior RNG, and is written
+into `creature-selected.stimulusId` (`null` for a no-selection trial). The
+brief, equal post-selection access and its bounded satiation effect are a pure
+function of that event and `SimConfig`, so the projector folds them from
+`creature-selected` alone; replay never re-runs the choice model or draws
+randomness.
+
 An active response has a default prompt-delivery window of 1,500 simulated
 milliseconds (`promptDeliveryWindowMs`). The window is fixed in simulated time
 and is not additionally scaled by the speed setting: at 0.5x speed those 1,500
@@ -215,6 +223,10 @@ stamped into `session-started`.
 
 | Constant | v1 default | Used by |
 |---|---|---|
+| `assessmentChoiceSensitivity` | 4 | Paired-stimulus choice model (Core Loop, Phase A) |
+| `assessmentNoSelectionScale` | 0.15 | Paired-stimulus choice model (Core Loop, Phase A) |
+| `assessmentSatiationPerAccess` | 0.05 | Bounded post-selection satiation (Core Loop, Phase A) |
+| `assessmentSatiationFloorFraction` | 0.85 | Bounded post-selection satiation (Core Loop, Phase A) |
 | `promptDeliveryWindowMs` | 1500 simulated ms | Delivery timing classification (3) |
 | `reinforcementDueWindowMs` | 10000 simulated ms | Criterion-missed and cycle abandonment (Core Loop, 5) |
 | `baselineDurationMs` | 45000 simulated ms | Round 0 |
