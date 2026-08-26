@@ -21,6 +21,12 @@ export {
   type SelectionSource,
   type StimulusRanking,
 } from './assessment'
+export {
+  baselineResponseRatePerMinute,
+  baselineWindow,
+  isBaselineComplete,
+  responseRateInWindow,
+} from './learning'
 export { createRng, type Rng } from './rng'
 export {
   STIMULUS_IDS,

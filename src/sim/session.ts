@@ -2,6 +2,7 @@ import { chooseInPair } from './assessment'
 import { resolveConfig, type SimConfig } from './config'
 import type { Phase, Round, SimEvent, Speed } from './events'
 import { createInitialState } from './initial-state'
+import { RESPONDING_PHASES, meanInterarrivalMs } from './learning'
 import { applyEvent } from './project'
 import { createRng, type Rng } from './rng'
 import { isStimulusId } from './stimuli'
@@ -43,9 +44,16 @@ export function createSession(
   const { config, configVersion } = resolveConfig(options.config)
 
   const behaviorRng = createRng(seed, 'behavior')
+  // A separate, namespaced stream drives only response timing (rng.ts's
+  // `label`), so a future draw elsewhere (e.g. the Milestone 2 assessment,
+  // which uses `behaviorRng`) can never shift the response-timestamp
+  // sequence this milestone's known-seed tests pin down.
+  const responseRng = createRng(seed, 'responses')
   const listeners = new Set<() => void>()
 
   let state: SessionState = createInitialState(seed, speed, config)
+  let nextResponseDueMs: number | undefined
+  let responseSeq = 0
 
   /**
    * The single commit point. A command validates fully, builds its candidate
@@ -106,17 +114,45 @@ export function createSession(
       const simDtMs = cappedMs * state.speed
       if (simDtMs <= 0) return ok([])
 
+      const windowStart = state.elapsedSimMs
+      const windowEnd = windowStart + simDtMs
       advanceClock(simDtMs)
 
-      // TODO(Milestone 3): emit seeded response events across this interval,
-      // and TODO(Milestone 4): expire due windows. Both must be driven by the
-      // simulated-time interval rather than by tick count, so a 30 Hz and a
-      // 120 Hz browser produce the same behavior. Draw from `behaviorRng`.
+      // Seeded free-operant response process: responses are drawn as an
+      // interval-based hazard (exponential inter-response time), not a
+      // per-frame coin flip, so a 30 Hz and a 120 Hz browser produce exactly
+      // the same sequence of response timestamps for the same simulated-time
+      // interval (ADR 0005). The rate is re-read from state after each
+      // response, since `applyEvent` (via `applyBehavioralEvent`) just
+      // recomputed it from the event log the response is now part of.
+      // TODO(Milestone 4): due-window expiry also belongs in this interval
+      // walk once cycle timeouts exist.
       const generated: SimEvent[] = []
-      if (generated.length > 0) return commit(generated)
+      if (RESPONDING_PHASES.has(state.phase)) {
+        if (nextResponseDueMs === undefined) {
+          const rate = state.creature.targetBehavior.currentRatePerMinute
+          nextResponseDueMs =
+            windowStart + responseRng.nextExponential(meanInterarrivalMs(rate))
+        }
+        while (
+          nextResponseDueMs !== undefined &&
+          nextResponseDueMs <= windowEnd
+        ) {
+          const event: SimEvent = {
+            type: 'response-emitted',
+            at: nextResponseDueMs,
+            responseId: `response-${++responseSeq}`,
+          }
+          state = applyEvent(state, event, config)
+          generated.push(event)
+          const rate = state.creature.targetBehavior.currentRatePerMinute
+          nextResponseDueMs =
+            event.at + responseRng.nextExponential(meanInterarrivalMs(rate))
+        }
+      }
 
       for (const listener of listeners) listener()
-      return ok([])
+      return ok(generated)
     },
 
     setPaused(paused) {

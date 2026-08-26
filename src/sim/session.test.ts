@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CONFIG_VERSION, DEFAULT_SIM_CONFIG } from './config'
+import { isBaselineComplete } from './learning'
 import { createSession } from './session'
 import { replay } from './replay'
 import type { SimEvent } from './events'
@@ -250,5 +251,163 @@ describe('replay', () => {
     expect(replay(SEED, s.getSnapshot().events)).toMatchObject({
       reason: 'malformed-log',
     })
+  })
+
+  it('replays identically across a baseline round containing seeded responses', () => {
+    const s = createSession({ seed: 'known-seed-1' })
+    completeAssessment(s)
+    s.startRound('baseline')
+    for (let i = 0; i < 45_000 / 50; i++) s.tick(50)
+    // `tick` alone doesn't guarantee the last op emitted an event; force one
+    // so live state and the log agree on elapsedSimMs (see project.ts notes).
+    s.setPaused(true)
+
+    const live = s.getSnapshot()
+    expect(
+      live.events.filter((e) => e.type === 'response-emitted').length,
+    ).toBeGreaterThan(0)
+
+    const result = replay('known-seed-1', live.events)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state).toEqual(live)
+  })
+})
+
+describe('free-operant response process', () => {
+  /** Documented seed cohort for probabilistic/property assertions below. */
+  const SEED_COHORT = Array.from({ length: 20 }, (_, i) => `cohort-seed-${i}`)
+
+  function runBaseline(seed: string, tickMs: number, ticks: number) {
+    const s = createSession({ seed })
+    completeAssessment(s)
+    s.startRound('baseline')
+    for (let i = 0; i < ticks; i++) s.tick(tickMs)
+    return s.getSnapshot()
+  }
+
+  it('emits a known response stream for a known seed (regression pin)', () => {
+    // These exact timestamps depend on the `responses`-labeled RNG stream's
+    // draw order alone (protected from the Milestone 2 assessment's separate
+    // `behaviorRng` draws by ADR-consistent stream namespacing), but they
+    // still depend on `createInitialState`'s `setupRng` draw sequence, since
+    // that determines this seed's baseline rate. If `initial-state.ts`'s
+    // draw order or count ever changes, re-pin these numbers rather than
+    // treating a diff here as a behavioral regression.
+    const snapshot = runBaseline('known-seed-1', 50, 45_000 / 50)
+    const responses = snapshot.events.filter(
+      (e): e is Extract<SimEvent, { type: 'response-emitted' }> =>
+        e.type === 'response-emitted',
+    )
+    expect(responses.map((r) => r.responseId)).toEqual([
+      'response-1',
+      'response-2',
+      'response-3',
+      'response-4',
+      'response-5',
+      'response-6',
+    ])
+    expect(responses.map((r) => Math.round(r.at))).toEqual([
+      842, 1121, 8824, 11059, 17401, 35462,
+    ])
+  })
+
+  it('produces render-frequency-invariant response timestamps (~40Hz vs ~120Hz)', () => {
+    // Same total simulated time (1000ms), different tick granularity.
+    const coarse = runBaseline('known-seed-1', 25, 40)
+    const fine = runBaseline('known-seed-1', 25 / 3, 120)
+
+    const coarseAt = coarse.events
+      .filter((e) => e.type === 'response-emitted')
+      .map((e) => e.at)
+    const fineAt = fine.events
+      .filter((e) => e.type === 'response-emitted')
+      .map((e) => e.at)
+
+    expect(fineAt.length).toBe(coarseAt.length)
+    fineAt.forEach((at, i) => expect(at).toBeCloseTo(coarseAt[i] as number, 6))
+  })
+
+  it('never lets response generation take the selected schedule as an input (session-level check)', () => {
+    // Same seed, same simulated ticks, only the schedule label differs. `a`
+    // stops in CRF; `b` proceeds straight on into VR via two `startRound`
+    // calls issued back-to-back with no ticks between them, so both
+    // `phase-changed` events land at the same `elapsedSimMs` and consume no
+    // `responseRng` draws. `startRound`'s own result is checked at each step
+    // -- a silently-rejected command (e.g. round order regressing) would
+    // otherwise leave both sessions in the same phase and pass vacuously.
+    const a = createSession({ seed: 'invariant-run' })
+    completeAssessment(a)
+    expect(a.startRound('baseline').ok).toBe(true)
+    for (let i = 0; i < 20; i++) a.tick(50)
+    expect(a.startRound('crf').ok).toBe(true)
+    for (let i = 0; i < 20; i++) a.tick(50)
+
+    const b = createSession({ seed: 'invariant-run' })
+    completeAssessment(b)
+    expect(b.startRound('baseline').ok).toBe(true)
+    for (let i = 0; i < 20; i++) b.tick(50)
+    expect(b.startRound('crf').ok).toBe(true)
+    expect(b.startRound('vr').ok).toBe(true)
+    for (let i = 0; i < 20; i++) b.tick(50)
+
+    expect(a.getSnapshot().schedulePlan?.type).toBe('CRF')
+    expect(b.getSnapshot().schedulePlan?.type).toBe('VR')
+
+    const responsesA = a
+      .getSnapshot()
+      .events.filter((e) => e.type === 'response-emitted')
+    const responsesB = b
+      .getSnapshot()
+      .events.filter((e) => e.type === 'response-emitted')
+    expect(responsesA).toEqual(responsesB)
+  })
+
+  it('marks baseline complete only after baselineDurationMs of simulated time (cohort)', () => {
+    for (const seed of SEED_COHORT.slice(0, 5)) {
+      const s = createSession({ seed })
+      completeAssessment(s)
+      s.startRound('baseline')
+      for (let i = 0; i < 44_000 / 50; i++) s.tick(50)
+      expect(
+        isBaselineComplete(
+          s.getSnapshot().events,
+          s.getSnapshot().elapsedSimMs,
+          DEFAULT_SIM_CONFIG,
+        ),
+      ).toBe(false)
+      for (let i = 0; i < 2000 / 50; i++) s.tick(50)
+      expect(
+        isBaselineComplete(
+          s.getSnapshot().events,
+          s.getSnapshot().elapsedSimMs,
+          DEFAULT_SIM_CONFIG,
+        ),
+      ).toBe(true)
+    }
+  })
+
+  it('does not generate responses during assessment', () => {
+    const s = createSession({ seed: SEED })
+    for (let i = 0; i < 100; i++) s.tick(50)
+    expect(
+      s.getSnapshot().events.some((e) => e.type === 'response-emitted'),
+    ).toBe(false)
+  })
+
+  it('produces a positive response count across a seed cohort within a 45s baseline (tolerant)', () => {
+    const counts = SEED_COHORT.map(
+      (seed) =>
+        runBaseline(seed, 50, 45_000 / 50).events.filter(
+          (e) => e.type === 'response-emitted',
+        ).length,
+    )
+    // Tolerant cohort assertion: most seeds should produce at least one
+    // response in 45s at baseline rates of 2-4/min, but not every seed is
+    // required to (testing-strategy.md).
+    const withAtLeastOne = counts.filter((c) => c > 0).length
+    expect(withAtLeastOne).toBeGreaterThanOrEqual(
+      Math.ceil(SEED_COHORT.length * 0.8),
+    )
   })
 })

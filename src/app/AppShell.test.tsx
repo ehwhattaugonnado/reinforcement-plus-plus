@@ -39,7 +39,9 @@ describe('AppShell', () => {
     await user.click(screen.getByRole('radio', { name: /advanced/i }))
 
     expect(screen.getByRole('radio', { name: /advanced/i })).toBeChecked()
-    expect(screen.getByText(/current phase/i)).toHaveTextContent(/assessment/i)
+    expect(
+      screen.getByRole('heading', { name: /preference assessment/i }),
+    ).toBeInTheDocument()
     expect(before).toBeTruthy()
   })
 

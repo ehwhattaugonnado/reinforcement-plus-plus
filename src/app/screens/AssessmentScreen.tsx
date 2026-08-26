@@ -55,7 +55,7 @@ export function AssessmentScreen({
 
   return (
     <section aria-labelledby="assessment-heading">
-      <h3 id="assessment-heading">Preference assessment</h3>
+      <h2 id="assessment-heading">Preference assessment</h2>
       <p>
         {creature.name} is offered two things, one pair at a time. Watch what{' '}
         {creature.name} does, then record what you saw. This builds a{' '}

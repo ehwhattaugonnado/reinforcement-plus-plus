@@ -59,6 +59,47 @@ export type SimConfig = {
 
   /** Cap on a single wall-clock tick delta, in wall-clock milliseconds. */
   maxTickDeltaMs: number
+
+  // --- Milestone 3: baseline and experienced-consequence learning model ---
+
+  /**
+   * Time constant (simulated ms) over which the influence of learned
+   * strength on response rate decays as time passes since the last
+   * experienced consequence. Larger = slower decay.
+   */
+  responseRateConsequenceDecayMs: number
+  /**
+   * Maximum responses/minute that fully-learned strength, undecayed and at
+   * full stimulus value, adds on top of the baseline rate.
+   */
+  learningRateGainPerMinute: number
+  /** Learned-strength gain from a response-contingent, prompt delivery. */
+  learnedStrengthGainPromptContingent: number
+  /** Learned-strength gain from a response-contingent, delayed delivery. */
+  learnedStrengthGainDelayedContingent: number
+  /** Learned-strength gain from any noncontingent delivery. */
+  learnedStrengthGainNoncontingent: number
+  /** Floor on the modeled response rate, responses/minute. */
+  responseRateFloorPerMinute: number
+  /** Ceiling on the modeled response rate, responses/minute. */
+  responseRateCeilingPerMinute: number
+
+  /** Fraction a stimulus's current value drops on each delivery. */
+  satiationDecayFraction: number
+  /**
+   * Time constant (simulated ms) for a satiated stimulus value's asymptotic
+   * recovery toward its recovery ceiling.
+   */
+  satiationRecoveryTimeConstantMs: number
+  /**
+   * Recovery is bounded: a stimulus value never recovers above
+   * `basePreference * satiationRecoveryCeilingFraction`, strictly less than
+   * full restoration. V1 has no persistence, so this bound only applies
+   * within one open session.
+   */
+  satiationRecoveryCeilingFraction: number
+  /** Floor a stimulus's current value never decays below. */
+  stimulusValueFloor: number
 }
 
 export const DEFAULT_SIM_CONFIG: SimConfig = {
@@ -94,6 +135,19 @@ export const DEFAULT_SIM_CONFIG: SimConfig = {
   burstAbsoluteIncrease: 2.0,
 
   maxTickDeltaMs: 250,
+
+  responseRateConsequenceDecayMs: 20000,
+  learningRateGainPerMinute: 6,
+  learnedStrengthGainPromptContingent: 0.18,
+  learnedStrengthGainDelayedContingent: 0.06,
+  learnedStrengthGainNoncontingent: 0.02,
+  responseRateFloorPerMinute: 0.5,
+  responseRateCeilingPerMinute: 20,
+
+  satiationDecayFraction: 0.12,
+  satiationRecoveryTimeConstantMs: 15000,
+  satiationRecoveryCeilingFraction: 0.92,
+  stimulusValueFloor: 0.05,
 }
 
 /**
