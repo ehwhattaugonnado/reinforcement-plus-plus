@@ -1,7 +1,8 @@
 # Core Loop
 
 See also: [Product Spec](product-spec.md) · [Data Model](architecture/data-model.md) for the
-`SimConfig` constants referenced below.
+`SimConfig` constants referenced below · [ABA Concept Glossary](aba-glossary.md) for
+sourced definitions of the terms used in this document.
 
 ## Phase A: Paired-Stimulus Preference Assessment
 
@@ -50,7 +51,10 @@ be interpreted; it is not scored as player performance. Its duration is
 - Every target response meets the CRF schedule criterion. The same due window
   applies: at most one criterion is outstanding at a time, so a burst of
   unreinforced responding produces one `criterion-missed` per elapsed due
-  window plus schedule overruns, not one event per response.
+  window plus schedule overruns, not one event per response. As with VR, a
+  due-window timeout emits `cycle-abandoned` alongside the diagnostic
+  `criterion-missed`, and that is the event the schedule-fidelity denominator
+  counts.
 - The player manually delivers the selected stimulus after a response.
 - The sim records promptness, contingency, missed opportunities, and
   deliveries made when no response is active.

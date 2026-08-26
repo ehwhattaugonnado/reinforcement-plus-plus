@@ -11,6 +11,8 @@ This is the single most important invariant in the whole design: **the selected 
 
 The creature's response-rate model never takes the selected `SchedulePlan` type as an input. Its inputs are: baseline rate/learned strength, the history/contingency/latency of actual stimulus deliveries, the delivered stimulus's current value, time since the last experienced consequence, extinction-transition state, and small seeded variability. If a player implements VR as CRF, misses eligible responses, delivers late, or delivers noncontingently, the learner model reacts to those actual events — not to the schedule label the player chose. This invariant has a dedicated Vitest test as "the central causal invariant" (see [../testing-strategy.md](../testing-strategy.md)).
 
+Cooper, Heron, & Heward (2020), Ch. 13, distinguish a schedule's *label* (the planned, average contingency, e.g. "VR-3") from what is *actually delivered* on a given cycle, and warn against the "common procedural misunderstanding" of assuming a schedule requirement is met just because its nominal condition (elapsed time, planned ratio) has occurred. This textbook framing is the closest published anchor for this invariant; see the [ABA Concept Glossary](../aba-glossary.md#intended-vs-actually-delivered-schedule--direct-precedent-for-the-sims-core-invariant) for the sourced passages.
+
 ## Consequences
 
 - The debrief can meaningfully compare intended vs. implemented schedule, because behavior is provably driven by what was actually delivered, not by a selected label.

@@ -2,7 +2,8 @@
 
 See also: [Architecture Overview](overview.md) · [Core Loop](../core-loop.md) ·
 [ADR 0001](../adr/0001-event-sourced-session-state.md) ·
-[ADR 0003](../adr/0003-eligibility-vs-experienced-consequences-invariant.md)
+[ADR 0003](../adr/0003-eligibility-vs-experienced-consequences-invariant.md) ·
+[ABA Concept Glossary](../aba-glossary.md)
 
 ## 1. Intended versus experienced contingencies
 

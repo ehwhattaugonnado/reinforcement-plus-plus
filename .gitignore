@@ -34,3 +34,6 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+
+# Local reference material (copyrighted source texts; not for distribution)
+docs/ref/

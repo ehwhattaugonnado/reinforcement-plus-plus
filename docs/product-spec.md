@@ -4,7 +4,7 @@
 **Date:** 2026-08-25
 **Repo:** https://github.com/ehwhattaugonnado/reinforcement-plus-plus
 
-See also: [Core Loop](core-loop.md) · [Architecture Overview](architecture/overview.md) · [ADR index](adr/README.md)
+See also: [Core Loop](core-loop.md) · [Architecture Overview](architecture/overview.md) · [ADR index](adr/README.md) · [ABA Concept Glossary](aba-glossary.md)
 
 ## 1. Concept Summary
 
@@ -133,11 +133,24 @@ Before public release:
 
 ## 7. Educational References
 
+- Cooper, Heron, & Heward (2020), *Applied Behavior Analysis* (3rd ed.),
+  Pearson — the primary source underlying this project's terminology. See the
+  project's [ABA Concept Glossary](aba-glossary.md) for definitions, precise
+  citations, and how each concept maps to the simulation.
 - Behavior Analyst Certification Board, [RBT Test Content Outline, 3rd
   edition](https://www.bacb.com/wp-content/rbt-outline-3rdEd/).
 - American Psychological Association, [definition of
   reinforcement](https://dictionary.apa.org/reinforcement).
+- Fisher, Piazza, Bowman, Hagopian, Owens, & Slevin (1992), A comparison of
+  two approaches for identifying reinforcers for persons with severe and
+  profound disabilities, *Journal of Applied Behavior Analysis, 25*, 491-498
+  — original source for the **paired-stimulus (forced-choice)** method, which
+  is the preference-assessment format v1 implements (see [Core Loop, Phase
+  A](core-loop.md#phase-a-paired-stimulus-preference-assessment)).
 - DeLeon & Iwata (1996), [Evaluation of a multiple-stimulus presentation
-  format for assessing reinforcer preferences](https://pubmed.ncbi.nlm.nih.gov/8995834/).
+  format for assessing reinforcer preferences](https://pubmed.ncbi.nlm.nih.gov/8995834/)
+  — describes and evaluates **MSWO**, which is explicitly out of scope for v1
+  (see [Deferred Work](#6-deferred-work)); retained here as background for
+  that deferred format, not as the source for v1's assessment method.
 - Muething et al. (2024), [Descriptive characteristics of extinction bursts: A
   record review](https://doi.org/10.1002/jaba.1054).
