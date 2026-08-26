@@ -37,8 +37,14 @@ RNG draws, so a rejection can never perturb deterministic replay. See
 [ADR 0008: typed command results](../adr/0008-typed-command-results.md) for the
 result and rejection-reason shapes. `replay` resolves the `SimConfig` for a log
 under the rules in
-[ADR 0009: replay config resolution](../adr/0009-replay-config-resolution.md),
-reconstructing state as of the last recorded event.
+[ADR 0009: replay config resolution](../adr/0009-replay-config-resolution.md).
+
+Replay reconstructs state **as of the last recorded event**, so the replayed
+`elapsedSimMs` equals that event's `at`. A tick that generates no events is
+deliberately not recorded — there is nothing about it to reconstruct — which
+means a live snapshot taken mid-interval is ahead of its own log by design.
+Compare a live session against its replay at an event boundary, not after a
+bare `tick`.
 
 Commands do not accept or expose mutable creature state. `deliverStimulus`
 classifies the delivery against the current response and schedule criterion;

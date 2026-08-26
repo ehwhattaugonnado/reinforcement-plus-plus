@@ -59,5 +59,7 @@ Rules:
 - Command handlers must validate fully before mutating. The core therefore
   builds candidate events first and commits them in one step, rather than
   mutating incrementally and unwinding on error.
-- Callers that ignore the result silently swallow rejections. Lint rules should
-  flag unused `CommandResult` values in `src/app/`.
+- Callers that ignore the result silently swallow rejections. Call sites in
+  `src/app/` must therefore either handle the result or discard it explicitly
+  (a `void` prefix), so that ignoring a rejection is always a visible choice in
+  the code rather than an oversight.

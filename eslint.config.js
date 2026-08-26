@@ -86,9 +86,6 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': 'warn',
-      // ADR 0008: a swallowed CommandResult hides a rejection from the learner,
-      // so the shell must handle or explicitly discard every command result.
-      '@typescript-eslint/no-floating-promises': 'off',
     },
   },
   {

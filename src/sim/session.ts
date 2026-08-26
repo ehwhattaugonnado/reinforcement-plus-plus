@@ -156,6 +156,16 @@ export function createSession(
           `in ${state.phase}, need ${allowed.join('|')}`,
         )
       }
+      // Phase order is the only gate so far. The behavioural advancement gates
+      // belong here too:
+      // TODO(Milestone 4): reject crf -> vr until `crfMinOnScheduleDeliveries`
+      // on-schedule deliveries and the acquisition-rate threshold are both met,
+      // derived from the event log.
+      // TODO(Milestone 5): reject vr -> extinction until `vrCyclesToComplete`
+      // on-schedule VR cycles have completed.
+      // TODO(Milestone 4/5): a round that ends while reinforcement is due must
+      // emit `cycle-abandoned` with reason 'round-ended' before the phase
+      // change, so the fidelity denominator stays correct.
       return commit([
         {
           type: 'phase-changed',
