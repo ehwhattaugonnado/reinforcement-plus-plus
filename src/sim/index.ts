@@ -8,6 +8,26 @@ export {
   type SimConfig,
 } from './config'
 export { applyEvent, applyEvents } from './project'
+export {
+  buildCumulativeRecordChartData,
+  buildResponseRateChartData,
+  cumulativeRecordAnnotationsTable,
+  cumulativeRecordPointsTable,
+  cumulativeRecordSummaryText,
+  responseRateByRoundTable,
+  responseRateSummaryText,
+  responseRateWindowsTable,
+  type CumulativeRecordAnnotation,
+  type CumulativeRecordAnnotationRow,
+  type CumulativeRecordChartData,
+  type CumulativeRecordPoint,
+  type CumulativeRecordPointRow,
+  type ResponseRateChartData,
+  type ResponseRateWindow,
+  type ResponseRateWindowRow,
+  type RoundResponseRate,
+  type RoundResponseRateRow,
+} from './chart-data'
 export { createRng, type Rng } from './rng'
 export {
   STIMULUS_IDS,
