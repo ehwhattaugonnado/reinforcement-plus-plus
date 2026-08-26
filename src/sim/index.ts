@@ -8,6 +8,19 @@ export {
   type SimConfig,
 } from './config'
 export { applyEvent, applyEvents } from './project'
+export {
+  applyAccessSatiation,
+  chooseInPair,
+  deriveAssessmentSummary,
+  deriveAssessmentTrials,
+  deriveHierarchy,
+  deriveRecordingAccuracy,
+  type AssessmentSummary,
+  type AssessmentTrialRecord,
+  type RecordingAccuracy,
+  type SelectionSource,
+  type StimulusRanking,
+} from './assessment'
 export { createRng, type Rng } from './rng'
 export {
   STIMULUS_IDS,

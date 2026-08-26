@@ -1,3 +1,4 @@
+import { applyAccessSatiation } from './assessment'
 import type { SimConfig } from './config'
 import type { Phase, SimEvent } from './events'
 import type { AssessmentTrial, SchedulePlan, SessionState } from './types'
@@ -78,11 +79,27 @@ function applyToFields(
         },
       }
 
-    case 'creature-selected':
-      return withCurrentTrial(state, (trial) => ({
+    case 'creature-selected': {
+      const withTrial = withCurrentTrial(state, (trial) => ({
         ...trial,
         creatureSelection: event.stimulusId,
       }))
+      // Brief, equal access follows a selection, and access satiates. The
+      // amount is a pure function of the event, so replay reproduces it
+      // without re-running the choice model.
+      if (event.stimulusId === null) return withTrial
+      return {
+        ...withTrial,
+        creature: {
+          ...withTrial.creature,
+          stimuli: applyAccessSatiation(
+            withTrial.creature.stimuli,
+            event.stimulusId,
+            config,
+          ),
+        },
+      }
+    }
 
     case 'selection-recorded': {
       const recorded = withCurrentTrial(state, (trial) => ({

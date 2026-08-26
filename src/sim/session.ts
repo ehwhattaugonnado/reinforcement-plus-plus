@@ -1,3 +1,4 @@
+import { chooseInPair } from './assessment'
 import { resolveConfig, type SimConfig } from './config'
 import type { Phase, Round, SimEvent, Speed } from './events'
 import { createInitialState } from './initial-state'
@@ -191,9 +192,17 @@ export function createSession(
         state.assessment.plannedPairs[state.assessment.currentTrialIndex]
       if (pair === undefined) return reject('already-complete')
 
-      // TODO(Milestone 2): model the creature's choice from current stimulus
-      // values, including no-selection trials and bounded satiation, via a
-      // dedicated assessment module. It must draw only from `behaviorRng`.
+      // Every validation above has passed, so the draws below are on the
+      // committed path: a rejected command still consumes no randomness
+      // (ADR 0008). The choice is made here, not in the projector, and is
+      // written into the event so replay folds it without an RNG.
+      const stimulusId = chooseInPair(
+        state.creature.stimuli,
+        pair[0],
+        pair[1],
+        behaviorRng,
+        config,
+      )
       return commit([
         {
           type: 'pair-presented',
@@ -204,7 +213,7 @@ export function createSession(
         {
           type: 'creature-selected',
           at: state.elapsedSimMs,
-          stimulusId: pair[0],
+          stimulusId,
         },
       ])
     },

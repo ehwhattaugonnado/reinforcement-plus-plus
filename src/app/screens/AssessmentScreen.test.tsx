@@ -1,0 +1,132 @@
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it } from 'vitest'
+import { expectNoAxeViolations } from '../../../tests/setup/axe'
+import { AppShell } from '../AppShell'
+
+/**
+ * Tabs forward from wherever focus currently is until it lands on a button
+ * whose accessible name matches `name`, then activates it with Enter. Throws
+ * if it never finds one within a generous number of tab stops, so a broken
+ * tab order fails loudly instead of hanging.
+ */
+async function tabToButton(
+  user: ReturnType<typeof userEvent.setup>,
+  name: RegExp,
+): Promise<void> {
+  for (let i = 0; i < 40; i++) {
+    await user.tab()
+    const active = document.activeElement
+    if (
+      active instanceof HTMLElement &&
+      active.tagName === 'BUTTON' &&
+      name.test(active.textContent ?? '')
+    ) {
+      await user.keyboard('{Enter}')
+      return
+    }
+  }
+  throw new Error(`never tabbed onto a button matching ${String(name)}`)
+}
+
+describe('AssessmentScreen', () => {
+  it('presents the first pair with a trial counter and a show-pair control', () => {
+    render(<AppShell seed="assessment-screen-test" />)
+    const section = screen.getByRole('region', {
+      name: /preference assessment/i,
+    })
+    expect(within(section).getByText(/trial 1 of 6/i)).toBeInTheDocument()
+    expect(
+      within(section).getByRole('button', { name: /show next pair/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('requires recording before the next pair can be shown', async () => {
+    const user = userEvent.setup()
+    render(<AppShell seed="assessment-screen-test" />)
+    const section = screen.getByRole('region', {
+      name: /preference assessment/i,
+    })
+
+    await user.click(
+      within(section).getByRole('button', { name: /show next pair/i }),
+    )
+    expect(
+      within(section).getByText(/record this trial before the next pair/i),
+    ).toBeInTheDocument()
+
+    // Show next pair is a guarded no-op while a trial is pending: clicking it
+    // again does not advance past trial 1.
+    await user.click(
+      within(section).getByRole('button', { name: /show next pair/i }),
+    )
+    expect(within(section).getByText(/trial 1 of 6/i)).toBeInTheDocument()
+  })
+
+  it('separates the creature selection from the learner record, including a no-selection record', async () => {
+    const user = userEvent.setup()
+    render(<AppShell seed="assessment-screen-test" />)
+    const section = screen.getByRole('region', {
+      name: /preference assessment/i,
+    })
+
+    await user.click(
+      within(section).getByRole('button', { name: /show next pair/i }),
+    )
+    // The creature's choice is already visible as text before anything is
+    // recorded -- this is an observation task, not a guessing game.
+    expect(
+      within(section).getByText(/approached:|made no selection/i),
+    ).toBeInTheDocument()
+
+    await user.click(
+      within(section).getByRole('button', {
+        name: /neither \(no selection\)/i,
+      }),
+    )
+    expect(within(section).getByText(/trial 2 of 6/i)).toBeInTheDocument()
+  })
+
+  it('completes the whole six-trial assessment keyboard-only and shows an accessible hierarchy table', async () => {
+    const user = userEvent.setup()
+    render(<AppShell seed="assessment-keyboard-test" />)
+
+    for (let trial = 0; trial < 6; trial++) {
+      await tabToButton(user, /show next pair/i)
+      await tabToButton(user, /neither \(no selection\)/i)
+    }
+
+    const section = screen.getByRole('region', {
+      name: /preference assessment/i,
+    })
+    expect(
+      within(section).getByText(/assessment complete: all 6 pairs presented/i),
+    ).toBeInTheDocument()
+
+    const table = within(section).getByRole('table')
+    expect(
+      within(table).getByRole('columnheader', { name: /rank/i }),
+    ).toBeInTheDocument()
+    // Header row plus one row per of the four stimuli.
+    expect(within(table).getAllByRole('row')).toHaveLength(5)
+
+    expect(
+      within(section).getAllByText(/preferred stimuli/i).length,
+    ).toBeGreaterThan(0)
+    expect(
+      within(section).getByRole('button', { name: /continue to training/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('has no automatically detectable accessibility violations mid-assessment', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<AppShell seed="assessment-axe-test" />)
+    const section = screen.getByRole('region', {
+      name: /preference assessment/i,
+    })
+    await user.click(
+      within(section).getByRole('button', { name: /show next pair/i }),
+    )
+    await expectNoAxeViolations(container)
+  })
+})

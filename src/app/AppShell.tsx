@@ -1,3 +1,4 @@
+import { AssessmentScreen } from './screens/AssessmentScreen'
 import { SessionControls } from './components/SessionControls'
 import { useMode } from './hooks/useMode'
 import { useSimState } from './hooks/useSimState'
@@ -5,8 +6,14 @@ import { useSimState } from './hooks/useSimState'
 /**
  * Owns the sim instance, the presentation mode, and screen navigation.
  *
- * Screens are added per milestone: OnboardingScreen and AssessmentScreen
- * (Milestone 2), TrainingScreen (Milestones 3-6), DebriefScreen (Milestone 7).
+ * Screens are added per milestone: AssessmentScreen (Milestone 2),
+ * TrainingScreen (Milestones 3-6), DebriefScreen (Milestone 7).
+ *
+ * `<main>` deliberately carries no `aria-live` region: the sim clock notifies
+ * on every animation frame (see `useSimClock`), and a live region on a
+ * container that re-renders that often would re-announce the whole screen
+ * continuously. Screens instead scope `role="status"` to the small element
+ * that actually changed (Accessibility, "Perception").
  */
 export function AppShell({ seed }: { seed?: string } = {}) {
   const { state, session } = useSimState(seed)
@@ -30,11 +37,14 @@ export function AppShell({ seed }: { seed?: string } = {}) {
         onModeChange={setMode}
       />
 
-      <main aria-live="polite">
+      <main>
         <h2>Session</h2>
         <p>
           Current phase: <strong>{state.phase}</strong>.
         </p>
+        {state.phase === 'assessment' ? (
+          <AssessmentScreen state={state} session={session} />
+        ) : null}
       </main>
     </div>
   )
