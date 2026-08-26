@@ -113,23 +113,23 @@ export function AssessmentScreen({
 
       <fieldset>
         <legend>Record what you observed</legend>
-        {pendingTrial === undefined ? (
+        {currentTrial === undefined ? (
           <p role="status">Nothing to record right now.</p>
         ) : (
           <div className="assessment-record-controls">
             <button
               type="button"
               aria-disabled={pendingTrial === undefined}
-              onClick={() => record(pendingTrial.leftId)}
+              onClick={() => record(currentTrial.leftId)}
             >
-              {STIMULUS_LABELS[pendingTrial.leftId as StimulusId]}
+              {STIMULUS_LABELS[currentTrial.leftId as StimulusId]}
             </button>
             <button
               type="button"
               aria-disabled={pendingTrial === undefined}
-              onClick={() => record(pendingTrial.rightId)}
+              onClick={() => record(currentTrial.rightId)}
             >
-              {STIMULUS_LABELS[pendingTrial.rightId as StimulusId]}
+              {STIMULUS_LABELS[currentTrial.rightId as StimulusId]}
             </button>
             <button
               type="button"

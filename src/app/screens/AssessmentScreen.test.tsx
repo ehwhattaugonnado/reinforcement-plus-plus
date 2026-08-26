@@ -93,7 +93,15 @@ describe('AssessmentScreen', () => {
 
     for (let trial = 0; trial < 6; trial++) {
       await tabToButton(user, /show next pair/i)
-      await tabToButton(user, /neither \(no selection\)/i)
+      // The record fieldset stays mounted for the whole phase (never
+      // unmounts mid-trial), so the very next tab stop after "Show next
+      // pair" is always the left-stimulus record button, regardless of
+      // which stimulus that trial happens to pair. Exercising the real
+      // stimulus button (not "Neither") is what proves the left/right
+      // record path -- not just the no-selection path -- is keyboard
+      // reachable and actually feeds the projector.
+      await user.tab()
+      await user.keyboard('{Enter}')
     }
 
     const section = screen.getByRole('region', {
@@ -108,7 +116,14 @@ describe('AssessmentScreen', () => {
       within(table).getByRole('columnheader', { name: /rank/i }),
     ).toBeInTheDocument()
     // Header row plus one row per of the four stimuli.
-    expect(within(table).getAllByRole('row')).toHaveLength(5)
+    const rows = within(table).getAllByRole('row')
+    expect(rows).toHaveLength(5)
+    // Recording every trial's left stimulus is not a no-op: some stimulus
+    // must have been selected at least once, so the hierarchy is not the
+    // degenerate all-zero, all-tied-at-rank-1 table a broken record handler
+    // would also produce.
+    const bodyRowText = rows.slice(1).map((row) => row.textContent ?? '')
+    expect(bodyRowText.some((text) => !/\b0\b.*\b0%/.test(text))).toBe(true)
 
     expect(
       within(section).getAllByText(/preferred stimuli/i).length,
