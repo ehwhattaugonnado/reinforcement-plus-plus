@@ -1,5 +1,10 @@
 import type { SimConfig } from './config'
 import type { Phase, SimEvent } from './events'
+import {
+  computeResponseRatePerMinute,
+  deriveLearnedStrength,
+  deriveStimuliValues,
+} from './learning'
 import type { AssessmentTrial, SchedulePlan, SessionState } from './types'
 
 /**
@@ -117,15 +122,46 @@ function applyToFields(
 function applyBehavioralEvent(
   state: SessionState,
   event: SimEvent,
-  _config: SimConfig,
+  config: SimConfig,
 ): SessionState {
   if (
     event.type === 'stimulus-delivered' ||
     event.type === 'response-emitted'
   ) {
-    // TODO(Milestone 3): learned strength, satiation, and rate updates derived
-    // from the delivery's contingency, timing, and stimulus value.
-    return state
+    // Every field below is re-derived from the event log (including `event`
+    // itself, not yet appended to `state.events` at this point) rather than
+    // updated incrementally, so live play and replay can never drift apart
+    // and no schedule-dependent shortcut can sneak in (ADR 0003).
+    const eventsSoFar = [...state.events, event]
+    const atMs = event.at
+    const learnedStrength = deriveLearnedStrength(eventsSoFar, atMs, config)
+    const stimuli = deriveStimuliValues(
+      eventsSoFar,
+      state.creature.stimuli,
+      atMs,
+      config,
+    )
+    const creatureWithUpdates = {
+      ...state.creature,
+      stimuli,
+      targetBehavior: { ...state.creature.targetBehavior, learnedStrength },
+    }
+    const currentRatePerMinute = computeResponseRatePerMinute(
+      eventsSoFar,
+      atMs,
+      config,
+      creatureWithUpdates,
+    )
+    return {
+      ...state,
+      creature: {
+        ...creatureWithUpdates,
+        targetBehavior: {
+          ...creatureWithUpdates.targetBehavior,
+          currentRatePerMinute,
+        },
+      },
+    }
   }
   if (event.type === 'criterion-met' && state.schedulePlan?.type === 'VR') {
     return {

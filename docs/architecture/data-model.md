@@ -139,10 +139,69 @@ The current response rate is a function of:
 The selected schedule type is intentionally absent from this list. Its effects
 emerge through the delivery history it arranges.
 
+**Implementation (Milestone 3, `src/sim/learning.ts`).** `session.ts`'s `tick`
+draws the next response's simulated-time due instant from an exponential
+interarrival distribution (`rng.nextExponential(meanInterarrivalMs(rate))`),
+using a namespaced RNG stream (`createRng(seed, 'responses')`) kept separate
+from `behaviorRng` so a later draw elsewhere in the same tick cannot shift the
+response-timestamp sequence. The rate used for each draw is always the rate
+computed *at the moment of the previous response* (or session start for the
+first draw), never a value sampled at a tick boundary; because ticks only
+decide which already-scheduled instants fall in `[windowStart, windowEnd)`,
+the resulting event sequence is exactly (bit-identical) render-frequency
+invariant.
+
+`project.ts`'s `applyBehavioralEvent` re-derives, from the event log
+(including the event being folded) rather than incrementally, on every
+`response-emitted` and `stimulus-delivered` event:
+
+- **Learned strength** — accumulates from `0`, clamped to `[0, 1]`, by a
+  per-delivery gain that depends only on that delivery's `contingency` and
+  `timing`: `learnedStrengthGainPromptContingent` >
+  `learnedStrengthGainDelayedContingent` >
+  `learnedStrengthGainNoncontingent`.
+- **Stimulus `currentValue`** — starts at `basePreference`; each delivery of
+  that stimulus multiplies it by `(1 - satiationDecayFraction)`, floored at
+  `stimulusValueFloor`; between deliveries it recovers exponentially (time
+  constant `satiationRecoveryTimeConstantMs`) toward a ceiling of
+  `basePreference * satiationRecoveryCeilingFraction`, strictly below full
+  restoration, so recovery is bounded even given unlimited open-tab time.
+- **Current response rate** — `baselineRatePerMinute` alone until the first
+  experienced consequence; afterward,
+  `baselineRatePerMinute + learnedStrength * influence * stimulusValue *
+  learningRateGainPerMinute`, where `influence =
+  exp(-timeSinceLastConsequenceMs / responseRateConsequenceDecayMs)` and
+  `stimulusValue` is the *most recently delivered* stimulus's current value at
+  that instant. Clamped to `[responseRateFloorPerMinute,
+  responseRateCeilingPerMinute]`.
+
+None of the above ever reads `SchedulePlan`; `applyBehavioralEvent` has a
+dedicated Vitest suite ("the central causal invariant") asserting that
+folding an identical `stimulus-delivered` event onto two states that differ
+only in `schedulePlan` produces identical `creature` output.
+
 Repeated access gradually reduces a stimulus's `currentValue`. Limited
-recovery may occur while the app remains open. Because v1 has no persistence,
+recovery may occur while the app remains open, bounded by
+`satiationRecoveryCeilingFraction` as above. Because v1 has no persistence,
 claims about recovery across visits are out of scope. Each new session instead
 seeds a new initial motivating condition.
+
+**Baseline round (Round 0).** The free-operant response process runs
+identically in `baseline`, `crf`, `vr`, and `extinction` — baseline is not a
+special case of the model, only of what the UI does with it. The baseline
+*window* is derived from the event log (`baselineWindow`, `src/sim/
+learning.ts`): from the last `phase-changed` into `baseline` to the earlier
+of `baselineDurationMs` later or the next `phase-changed` away from it, so a
+learner who leaves early or lingers doesn't skew the metric.
+`isBaselineComplete` is a derived boolean (`elapsedSimMs - baselineStart >=
+baselineDurationMs`) that a screen can use to offer moving on; it does not
+itself end the round, change phase, or emit an event — the explicit stimulus
+choice and `startRound('crf')` command still gate advancement, per the core
+loop. `baselineResponseRatePerMinute` (responses observed in that window ÷
+observed simulated time in that window) is the *event-derived* baseline rate
+used by later milestones' gates (Section 5); it is deliberately distinct from
+the seeded latent `creature.targetBehavior.baselineRatePerMinute`, which is
+an internal model input, not a claim about what was observed.
 
 Extinction transitions are parameterized and seeded. Known test seeds cover
 both burst and no-burst outcomes, but the implementation must not treat a
@@ -237,6 +296,17 @@ stamped into `session-started`.
 | `burstRelativeIncrease` | 0.50 | Burst detection |
 | `burstAbsoluteIncrease` | 2.0 responses/min | Burst detection |
 | `maxTickDeltaMs` | 250 wall-clock ms | Clock delta capping (see [Architecture Overview](overview.md)) |
+| `responseRateConsequenceDecayMs` | 20000 simulated ms | Response-rate decay toward baseline (Section 4) |
+| `learningRateGainPerMinute` | 6 responses/min | Response-rate model (Section 4) |
+| `learnedStrengthGainPromptContingent` | 0.18 | Learned-strength accumulation (Section 4) |
+| `learnedStrengthGainDelayedContingent` | 0.06 | Learned-strength accumulation (Section 4) |
+| `learnedStrengthGainNoncontingent` | 0.02 | Learned-strength accumulation (Section 4) |
+| `responseRateFloorPerMinute` | 0.5 responses/min | Response-rate model floor (Section 4) |
+| `responseRateCeilingPerMinute` | 20 responses/min | Response-rate model ceiling (Section 4) |
+| `satiationDecayFraction` | 0.12 | Stimulus-value decay per delivery (Section 4) |
+| `satiationRecoveryTimeConstantMs` | 15000 simulated ms | Stimulus-value recovery rate (Section 4) |
+| `satiationRecoveryCeilingFraction` | 0.92 | Stimulus-value recovery bound (Section 4) |
+| `stimulusValueFloor` | 0.05 | Stimulus-value decay floor (Section 4) |
 
 The acquisition gate (`crfAcquisition*`) is intentionally a shorter, stricter
 window than the reinforcer-evidence rule (`reinforcerEvidence*`): the first

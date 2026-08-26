@@ -1,6 +1,9 @@
 import { SessionControls } from './components/SessionControls'
 import { useMode } from './hooks/useMode'
 import { useSimState } from './hooks/useSimState'
+import { TrainingScreen } from './screens/TrainingScreen'
+
+const TRAINING_PHASES = new Set(['baseline', 'crf', 'vr', 'extinction'])
 
 /**
  * Owns the sim instance, the presentation mode, and screen navigation.
@@ -30,11 +33,22 @@ export function AppShell({ seed }: { seed?: string } = {}) {
         onModeChange={setMode}
       />
 
-      <main aria-live="polite">
-        <h2>Session</h2>
-        <p>
-          Current phase: <strong>{state.phase}</strong>.
-        </p>
+      {/*
+        No aria-live here: screens own their own targeted status regions
+        (e.g. TrainingScreen's baseline-progress status) instead of one
+        live region re-announcing the whole screen on every change.
+      */}
+      <main>
+        {TRAINING_PHASES.has(state.phase) ? (
+          <TrainingScreen state={state} session={session} />
+        ) : (
+          <>
+            <h2>Session</h2>
+            <p>
+              Current phase: <strong>{state.phase}</strong>.
+            </p>
+          </>
+        )}
       </main>
     </div>
   )

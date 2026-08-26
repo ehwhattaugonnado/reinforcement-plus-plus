@@ -8,6 +8,12 @@ export {
   type SimConfig,
 } from './config'
 export { applyEvent, applyEvents } from './project'
+export {
+  baselineResponseRatePerMinute,
+  baselineWindow,
+  isBaselineComplete,
+  responseRateInWindow,
+} from './learning'
 export { createRng, type Rng } from './rng'
 export {
   STIMULUS_IDS,
