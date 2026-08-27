@@ -1,5 +1,13 @@
 # Testing Strategy
 
+**Implementation status (2026-08-27):** Vitest currently covers the simulation
+foundation, paired assessment, baseline/learning model, evidence rules, chart
+data, chart views, and shell/screen integration. Playwright covers shell smoke,
+pause/speed controls, keyboard operation, and automated axe checks. CRF/VR
+cycle behavior, live seeded extinction outcomes, shared debrief conclusions,
+the complete learner path, background pausing, reduced motion, and manual
+accessibility review remain open with their corresponding milestones.
+
 See also: [Product Spec](./product-spec.md) · [Core Loop](./core-loop.md) ·
 [Architecture Overview](./architecture/overview.md) ·
 [Data Model](./architecture/data-model.md)

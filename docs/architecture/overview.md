@@ -46,11 +46,13 @@ means a live snapshot taken mid-interval is ahead of its own log by design.
 Compare a live session against its replay at an event boundary, not after a
 bare `tick`.
 
-Commands do not accept or expose mutable creature state. `deliverStimulus`
-classifies the delivery against the current response and schedule criterion;
-the generated event contains the associated `responseId` when one exists. The
-`config` option exists for tests and fixtures only; the React shell always
-constructs a session with the
+Commands do not accept or expose mutable creature state. The Milestone 4
+contract requires `deliverStimulus` to classify a delivery against the current
+response and schedule criterion and to include the associated `responseId`
+when one exists. The current implementation still emits an always-
+noncontingent placeholder delivery, so this behavior must not be treated as
+complete. The `config` option exists for tests and fixtures only; the React
+shell always constructs a session with the
 [configuration constants](./data-model.md#6-configuration-constants) defaults.
 
 The React shell (`src/app/`) uses `useSyncExternalStore` through a
@@ -71,6 +73,11 @@ and what the creature actually experiences follow the invariant described in
 [ADR 0003: eligibility vs. experienced consequences invariant](../adr/0003-eligibility-vs-experienced-consequences-invariant.md).
 
 ## Screens
+
+This list describes the approved v1 screen ownership. `AppShell`,
+`AssessmentScreen`, and the baseline portion of `TrainingScreen` are currently
+wired. Onboarding, CRF/VR/extinction interactions, Advanced live views, and
+`DebriefScreen` remain implementation work.
 
 - **AppShell:** owns the sim instance, mode toggle, accessibility controls,
   and screen navigation.

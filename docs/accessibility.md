@@ -1,5 +1,13 @@
 # Accessibility Requirements
 
+**Implementation status (2026-08-27):** The current shell, session controls,
+assessment, baseline screen, and chart views include keyboard and textual
+alternatives with automated component/browser accessibility checks. The full
+timed CRF/VR flow, live Advanced views, debrief navigation, background-pause
+behavior, reduced-motion E2E coverage, touch review, screen-reader review, and
+color/contrast review remain release work. Automated checks do not replace the
+manual WCAG 2.2 AA review required before release.
+
 See also: [Product Spec](./product-spec.md) ·
 [Architecture Overview](./architecture/overview.md) ·
 [Data Model](./architecture/data-model.md) ·

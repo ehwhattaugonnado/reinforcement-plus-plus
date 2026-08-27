@@ -211,8 +211,10 @@ used by later milestones' gates (Section 5); it is deliberately distinct from
 the seeded latent `creature.targetBehavior.baselineRatePerMinute`, which is
 an internal model input, not a claim about what was observed.
 
-Extinction transitions are parameterized and seeded. Known test seeds cover
-both burst and no-burst outcomes, but the implementation must not treat a
+Extinction transitions must be parameterized and seeded. The event-derived
+detector currently has constructed burst, no-burst, and indeterminate-log
+coverage; the live transition model and known model seeds for both burst and
+no-burst outcomes remain Milestone 6 work. The implementation must not treat a
 published clinical prevalence as a literal probability for the fictional
 creature.
 

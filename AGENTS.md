@@ -2,7 +2,7 @@
 
 ## Project
 
-Reinforcement++ is a browser-based pet-training simulation that teaches preference assessment and positive reinforcement. V1 is a 10–20 minute, low-stakes educational experience, not clinical decision support. The repository currently contains the approved design documentation; application scaffolding has not yet been added.
+Reinforcement++ is a browser-based pet-training simulation that teaches preference assessment and positive reinforcement. V1 is a 10–20 minute, low-stakes educational experience, not clinical decision support. The repository contains the approved design documentation and an in-progress Vite/React/TypeScript implementation. Milestones 0–3 are substantially complete; Milestones 6–7 have isolated evidence/chart foundations, while CRF/VR interaction, the live extinction model, debrief UI, and release hardening remain. Use `docs/roadmap.md` as the detailed status source.
 
 ## Read Before Changing Code
 
@@ -52,4 +52,4 @@ Keep these documents consistent when a product or architecture decision changes.
 - Make the smallest change that satisfies the documented requirement; prefer discriminated unions and typed invalid-command results that append no partial event.
 - Add or update tests with behavioral changes, and update documentation when assumptions, event shapes, metrics, config defaults, or scope change.
 - Do not commit `docs/ref/`; it contains local copyrighted reference material and is intentionally ignored.
-- There is no package manifest or canonical command set yet. After scaffolding, use the repository’s chosen lockfile and `package.json` scripts; before handoff, run all available formatting, type-check, unit, and relevant end-to-end checks and report anything unavailable.
+- Use npm and the committed `package-lock.json`; do not introduce a second lockfile. Before handoff, run `npm run check`, `npm run build`, and relevant Playwright tests, and report any unavailable or manual checks.

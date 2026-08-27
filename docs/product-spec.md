@@ -1,6 +1,6 @@
 # Product Spec: Reinforcement & Preference Assessment Teaching Game
 
-**Status:** Approved for implementation planning
+**Status:** Approved v1 specification; implementation in progress
 **Date:** 2026-08-25
 **Repo:** https://github.com/ehwhattaugonnado/reinforcement-plus-plus
 

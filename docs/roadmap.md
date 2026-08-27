@@ -1,8 +1,8 @@
 # V1 Implementation Roadmap
 
-**Status:** Proposed implementation sequence
+**Status:** Active implementation plan
 
-**Date:** 2026-08-26
+**Date:** 2026-08-27
 
 See also: [Product Spec](product-spec.md) · [Core Loop](core-loop.md) ·
 [Architecture Overview](architecture/overview.md) ·
@@ -36,6 +36,25 @@ Standard Celeration Chart.
   test-fixture-only, and every threshold change updates `configVersion`.
 - Preserve the distinction between a preferred stimulus and a demonstrated
   reinforcer in types, summaries, and learner-facing copy.
+
+## 2.1 Current Implementation Status
+
+As of 2026-08-27, the repository is on `feat/v1-foundation` and the milestone
+status is:
+
+| Milestone | Status | Current evidence |
+|---|---|---|
+| 0 — Scaffold | Complete | Vite/React/TypeScript, npm scripts, Vitest, RTL, axe, and Playwright are configured. |
+| 1 — Simulation foundation | Complete | Seeded RNG, controlled clock, typed atomic commands, immutable snapshots, config-aware replay, and deterministic tests are present. |
+| 2 — Assessment | Complete | Six seeded unique pairs, separate observed/recorded selections, hierarchy derivation, accessible UI, and tests are present. |
+| 3 — Baseline/learning | Complete | Render-frequency-independent response generation, baseline metrics, experienced-consequence learning, satiation/recovery, UI, and tests are present. |
+| 4 — CRF | Not started | `deliverStimulus` remains a noncontingent stub; cycle classification, timeouts, metrics, coaching, and advancement gates remain. |
+| 5 — VR-3 | Not started | The phase/schedule shape exists, but requirement generation, cycle semantics, completion gates, UI, and tests remain. |
+| 6 — Extinction/evidence | Partial | Event-derived reinforcer-evidence and burst-detection rules are tested; the live seeded extinction transition and known model-seed coverage remain. |
+| 7 — Debrief/charts | Partial | Shared chart-data projectors and accessible visx chart views are tested; the mode-neutral session summary, debrief screen, live event table, and shell wiring remain. |
+| 8 — Release hardening | Not started | Playwright currently covers shell smoke, controls, keyboard operation, and an automated axe pass, not the complete learner journey. |
+
+The next critical-path increment is Milestone 4, followed by Milestone 5.
 
 ## 3. Milestones
 
@@ -308,8 +327,8 @@ A milestone is complete only when:
 
 | Checkpoint | Why it matters | Resolve by |
 |---|---|---|
-| Command-result signature | The docs currently show `void` commands but require typed invalid-command results and atomic rejection. | Before Milestone 1 implementation |
-| Replay/config lookup contract | `configVersion` prevents silent reinterpretation; replay must also define how the matching config is resolved. | During Milestone 1 |
+| Command-result signature | Resolved by ADR 0008 and implemented with typed, atomic command results. | Resolved |
+| Replay/config lookup contract | Resolved by ADR 0009 and implemented with version-aware replay rejection. | Resolved |
 | Learning-model calibration | The central causal invariant must remain true while behavior changes are visible within a short session. | Milestones 3–5, then cohort tuning in Milestone 8 |
 | Due-window and session-length tuning | A short due window can unfairly lower fidelity, while long coaching paths can exceed the session budget. | First playable CRF/VR slice; finalize in Milestone 8 |
 | Learner-facing copy | Small wording errors can collapse preferred stimulus into reinforcer or overstate extinction outcomes. | Draft with each slice; SME gate before public release |
@@ -318,15 +337,16 @@ A milestone is complete only when:
 | `nowMs` wiring for live charts | `buildCumulativeRecordChartData` and `buildResponseRateChartData` (Milestone 7) default their time extent to the latest logged event; a live, still-open round left idle understates its own duration and so overstates its displayed rate unless the caller passes `state.elapsedSimMs` explicitly. Nothing is wired into `AppShell` yet, so nothing is wrong today, but the debrief/live-training wiring must not skip this argument. | Milestone 7 UI wiring / Milestone 8 hardening |
 | Extinction-transition state | Milestone 3's learning model does not separately model the "extinction-transition state" listed as a rate input in the data model (§4); it assumes the existing recency-decay term already produces the post-cessation decline Milestone 6's burst detector needs. Milestone 6's detector is tested only against hand-constructed logs, so this assumption is unfalsified — no test yet connects a live extinction round's actual output to the detector. | Milestone 6 behavior-model half / verify before Milestone 8 |
 
-## 7. Recommended First Implementation Increment
+## 7. Recommended Next Implementation Increment
 
-Start with Milestones 0 and 1, ending in a headless demonstration that:
+Implement Milestone 4 as the next vertical slice:
 
-1. creates a seeded session,
-2. records pause and speed changes,
-3. advances simulated time at both speeds,
-4. rejects an invalid phase command without appending an event, and
-5. replays to an identical immutable snapshot from the seed and event log.
+1. associate CRF responses with one outstanding schedule criterion,
+2. classify delivery contingency, timing, and schedule fidelity independently,
+3. emit exactly one abandoned cycle per due-window timeout,
+4. derive CRF learner metrics and acquisition gates from the event log,
+5. add constructive coaching and accessible manual-delivery interaction, and
+6. verify successful and coached paths at both supported speeds.
 
-That increment validates the most consequential ADRs before UI and learning
-rules accumulate on top of them.
+This closes the current delivery stub and provides the cycle machinery that
+guided VR-3 builds on next.
