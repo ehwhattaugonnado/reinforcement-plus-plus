@@ -15,16 +15,21 @@ application currently includes:
   time, pause, and 0.5x/1x speed;
 - the complete six-trial paired-stimulus assessment;
 - baseline response generation and an experienced-consequence learning model;
-- event-derived reinforcer-evidence and extinction-burst rules;
+- CRF delivery classification, acquisition gates, corrective coaching, and an
+  accessible manual-delivery training screen;
+- event-derived reinforcer-evidence and extinction-burst rules, including a
+  live seeded extinction-transition model calibrated against a 150-seed
+  cohort;
 - project-owned cumulative-record and response-rate chart data and accessible
-  visx chart views; and
+  visx chart views, wired into an Advanced-mode live training view with an
+  accessible event table; and
 - Vitest, React Testing Library, Playwright smoke, and automated accessibility
   coverage.
 
-The complete learner path is not ready yet. CRF delivery classification and
-acquisition gates, guided VR-3 cycles, the live extinction transition, the
-shared debrief UI, and release hardening remain. See the
-[implementation roadmap](docs/roadmap.md) for the detailed status and sequence.
+The complete learner path is not ready yet. Guided VR-3 maintenance cycles,
+the extinction round's own UI/timing, the shared debrief screen, and release
+hardening remain. See the [implementation roadmap](docs/roadmap.md) for the
+detailed status and sequence.
 
 ## Getting started
 
