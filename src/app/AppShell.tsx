@@ -44,7 +44,7 @@ export function AppShell({ seed }: { seed?: string } = {}) {
         {state.phase === 'assessment' ? (
           <AssessmentScreen state={state} session={session} />
         ) : TRAINING_PHASES.has(state.phase) ? (
-          <TrainingScreen state={state} session={session} />
+          <TrainingScreen state={state} session={session} mode={mode} />
         ) : (
           <>
             <h2>Session</h2>

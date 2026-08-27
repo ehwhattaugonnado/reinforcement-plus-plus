@@ -196,6 +196,23 @@ export type BurstDetectionResult =
       readonly thresholds: BurstThresholds
     }
   | {
+      /**
+       * The reference and/or detection window cleared its duration floor but
+       * had fewer than its respective sample-count floor
+       * (`burstMinReferenceResponses`/`burstMinDetectionResponses`)
+       * responses, so a single extra
+       * (or missing) response could swing the comparison past the burst
+       * thresholds on sampling noise alone. Neither a burst nor a confirmed
+       * no-burst: too short to characterize.
+       */
+      readonly kind: 'indeterminate'
+      readonly reason: 'insufficient-samples'
+      readonly anchorAtMs: number
+      readonly referenceRound: Phase
+      readonly comparison: RateComparison
+      readonly thresholds: BurstThresholds
+    }
+  | {
       readonly kind: 'not-evaluable'
       readonly reason: BurstNotEvaluableReason
     }
@@ -496,9 +513,17 @@ function firstWithheldCriterionAt(
  * shorter than `burstMinReferenceWindowMs`, the result is `indeterminate`:
  * neither a burst nor a confirmed no-burst.
  *
- * Section 5 specifies a floor for the reference window only, so no minimum is
- * imposed on the detection window; it is merely clamped to the observed end of
- * the extinction round, and a zero-length one is `not-evaluable`.
+ * Both the reference and detection windows also require at least their
+ * respective sample-count floor (`burstMinReferenceResponses`/
+ * `burstMinDetectionResponses`) before a verdict is trusted; below either,
+ * the result is `indeterminate` with reason `'insufficient-samples'`. The
+ * detection window itself is clamped to the observed end of the extinction
+ * round, and a zero-length one is `not-evaluable` -- so an extinction round
+ * shorter than `burstDetectionWindowMs` past the first withheld criterion
+ * will tend to fall short of `burstMinDetectionResponses` and read as
+ * `insufficient-samples` rather than a confident verdict (see
+ * `burstMinDetectionResponses`'s doc comment in config.ts for the measured
+ * distribution, which assumes a round with headroom past the full window).
  */
 export function detectExtinctionBurst(
   events: readonly SimEvent[],
@@ -578,6 +603,19 @@ export function detectExtinctionBurst(
     config.burstRelativeIncrease,
     config.burstAbsoluteIncrease,
   )
+
+  if (
+    referenceSample.responses < config.burstMinReferenceResponses ||
+    detectionSample.responses < config.burstMinDetectionResponses
+  )
+    return {
+      kind: 'indeterminate',
+      reason: 'insufficient-samples',
+      anchorAtMs,
+      referenceRound: reference.phase,
+      comparison,
+      thresholds,
+    }
 
   const unmet: BurstCheck[] = []
   if (!comparison.relativeThresholdMet) unmet.push('relative-increase')

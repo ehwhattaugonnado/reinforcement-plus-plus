@@ -1,5 +1,11 @@
 import { chooseInPair } from './assessment'
 import { resolveConfig, type SimConfig } from './config'
+import {
+  classifyDelivery,
+  crfAcquisitionMet,
+  deriveOutstandingCycle,
+  type OutstandingCycle,
+} from './crf'
 import type { Phase, Round, SimEvent, Speed } from './events'
 import { createInitialState } from './initial-state'
 import { RESPONDING_PHASES, meanInterarrivalMs } from './learning'
@@ -125,8 +131,15 @@ export function createSession(
       // interval (ADR 0005). The rate is re-read from state after each
       // response, since `applyEvent` (via `applyBehavioralEvent`) just
       // recomputed it from the event log the response is now part of.
-      // TODO(Milestone 4): due-window expiry also belongs in this interval
-      // walk once cycle timeouts exist.
+      //
+      // Due-window expiry (Milestone 4) is merged into the same forward walk
+      // as a second, independent candidate: whichever of "next response due"
+      // or "outstanding cycle's due-by instant" comes first within this
+      // tick's window is processed next. Abandonment never redraws
+      // `responseRng` or perturbs `nextResponseDueMs` -- an unreinforced
+      // cycle timing out does not change the creature's behavior (ADR 0003),
+      // so it must not shift the response-timestamp sequence known-seed
+      // tests and replay pin down.
       const generated: SimEvent[] = []
       if (RESPONDING_PHASES.has(state.phase)) {
         if (nextResponseDueMs === undefined) {
@@ -134,20 +147,65 @@ export function createSession(
           nextResponseDueMs =
             windowStart + responseRng.nextExponential(meanInterarrivalMs(rate))
         }
-        while (
-          nextResponseDueMs !== undefined &&
-          nextResponseDueMs <= windowEnd
-        ) {
-          const event: SimEvent = {
-            type: 'response-emitted',
-            at: nextResponseDueMs,
-            responseId: `response-${++responseSeq}`,
+
+        for (;;) {
+          const outstanding = deriveOutstandingCycle(state.events, config)
+          const abandonAtMs = outstanding?.dueByMs
+
+          const respondFirst =
+            abandonAtMs === undefined || nextResponseDueMs <= abandonAtMs
+          const candidateAtMs = respondFirst ? nextResponseDueMs : abandonAtMs
+
+          if (candidateAtMs === undefined || candidateAtMs > windowEnd) break
+
+          if (respondFirst) {
+            const event: SimEvent = {
+              type: 'response-emitted',
+              at: nextResponseDueMs,
+              responseId: `response-${++responseSeq}`,
+            }
+            state = applyEvent(state, event, config)
+            generated.push(event)
+
+            // CRF: every response meets the schedule criterion (core-loop.md
+            // Round 1), but at most one criterion is outstanding at a time.
+            // TODO(Milestone 5): VR ratio-requirement criteria.
+            // TODO(Milestone 6): extinction round's withheld-criterion path.
+            if (
+              state.phase === 'crf' &&
+              deriveOutstandingCycle(state.events, config) === null
+            ) {
+              const criterionMetEvent: SimEvent = {
+                type: 'criterion-met',
+                at: event.at,
+                responseId: event.responseId,
+                schedule: 'CRF',
+              }
+              state = applyEvent(state, criterionMetEvent, config)
+              generated.push(criterionMetEvent)
+            }
+
+            const rate = state.creature.targetBehavior.currentRatePerMinute
+            nextResponseDueMs =
+              event.at + responseRng.nextExponential(meanInterarrivalMs(rate))
+          } else {
+            const due = outstanding as OutstandingCycle
+            const missedEvent: SimEvent = {
+              type: 'criterion-missed',
+              at: due.dueByMs,
+              responseId: due.responseId,
+            }
+            state = applyEvent(state, missedEvent, config)
+            generated.push(missedEvent)
+
+            const abandonedEvent: SimEvent = {
+              type: 'cycle-abandoned',
+              at: due.dueByMs,
+              reason: 'due-window-elapsed',
+            }
+            state = applyEvent(state, abandonedEvent, config)
+            generated.push(abandonedEvent)
           }
-          state = applyEvent(state, event, config)
-          generated.push(event)
-          const rate = state.creature.targetBehavior.currentRatePerMinute
-          nextResponseDueMs =
-            event.at + responseRng.nextExponential(meanInterarrivalMs(rate))
         }
       }
 
@@ -193,23 +251,40 @@ export function createSession(
           `in ${state.phase}, need ${allowed.join('|')}`,
         )
       }
-      // Phase order is the only gate so far. The behavioural advancement gates
-      // belong here too:
-      // TODO(Milestone 4): reject crf -> vr until `crfMinOnScheduleDeliveries`
-      // on-schedule deliveries and the acquisition-rate threshold are both met,
-      // derived from the event log.
+      if (
+        round === 'vr' &&
+        !crfAcquisitionMet(state.events, state.elapsedSimMs, config)
+      ) {
+        return reject(
+          'acquisition-not-met',
+          'CRF acquisition gate (min on-schedule deliveries and response-rate ' +
+            'increase over baseline) is not yet met',
+        )
+      }
       // TODO(Milestone 5): reject vr -> extinction until `vrCyclesToComplete`
       // on-schedule VR cycles have completed.
-      // TODO(Milestone 4/5): a round that ends while reinforcement is due must
-      // emit `cycle-abandoned` with reason 'round-ended' before the phase
-      // change, so the fidelity denominator stays correct.
-      return commit([
-        {
-          type: 'phase-changed',
+
+      // A round can end with a criterion outstanding (reinforcement due but
+      // not yet delivered or timed out). Abandon it here, before the phase
+      // change, so the fidelity denominator never has a dangling cycle
+      // (data-model section 5). No `criterion-missed` accompanies this:
+      // that diagnostic event is reserved for an elapsed due window, not for
+      // a learner-initiated round transition (core-loop.md Round 2 -- "the
+      // only way a criterion is missed").
+      const events: SimEvent[] = []
+      if (deriveOutstandingCycle(state.events, config) !== null) {
+        events.push({
+          type: 'cycle-abandoned',
           at: state.elapsedSimMs,
-          phase: PHASE_FOR_ROUND[round],
-        },
-      ])
+          reason: 'round-ended',
+        })
+      }
+      events.push({
+        type: 'phase-changed',
+        at: state.elapsedSimMs,
+        phase: PHASE_FOR_ROUND[round],
+      })
+      return commit(events)
     },
 
     presentNextPair() {
@@ -284,19 +359,24 @@ export function createSession(
         return reject('wrong-phase', `in ${state.phase}`)
       }
 
-      // TODO(Milestone 4): classify contingency, timing, and schedule fidelity
-      // as three independent dimensions against the active response and the
-      // outstanding criterion.
+      // Classification happens here, on the committed path, so the
+      // resulting event carries its own contingency/timing/schedule-fidelity
+      // dimensions and replay never needs to re-derive them (crf.ts).
+      const classification = classifyDelivery(
+        state.events,
+        state.elapsedSimMs,
+        config,
+      )
       return commit([
         {
           type: 'stimulus-delivered',
           at: state.elapsedSimMs,
           stimulusId,
-          responseId: null,
-          latencyMs: null,
-          contingency: 'noncontingent',
-          timing: 'no-response',
-          scheduleFidelity: 'not-applicable',
+          responseId: classification.responseId,
+          latencyMs: classification.latencyMs,
+          contingency: classification.contingency,
+          timing: classification.timing,
+          scheduleFidelity: classification.scheduleFidelity,
         },
       ])
     },

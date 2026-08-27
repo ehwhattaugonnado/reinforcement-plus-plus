@@ -47,6 +47,17 @@ export type CreatureState = {
     readonly baselineRatePerMinute: number
     readonly learnedStrength: number
     readonly currentRatePerMinute: number
+    /**
+     * Seeded once at session creation (`initial-state.ts`): whether this
+     * creature's extinction-transition state includes a genuine transient
+     * response-rate increase after reinforcement stops. Read only by
+     * `computeResponseRatePerMinute`; the burst *detector* (`evidence.ts`)
+     * never sees this field and must derive its verdict from the resulting
+     * events alone (AGENTS.md: no narrative burst flag).
+     */
+    readonly extinctionBurstPrimed: boolean
+    /** Seeded [0.5, 1.5] multiplier on a primed creature's burst magnitude. */
+    readonly extinctionBurstMagnitudeScale: number
   }
 }
 
@@ -91,6 +102,13 @@ export type CommandRejectionReason =
   | 'already-complete'
   | 'unknown-stimulus'
   | 'invalid-argument'
+  /**
+   * CRF -> VR only (Milestone 4): rejected until both
+   * `crfMinOnScheduleDeliveries` on-schedule deliveries and the
+   * acquisition-rate threshold are met (data-model section 6). See
+   * `crfAcquisitionMet` in `crf.ts`.
+   */
+  | 'acquisition-not-met'
 
 export type CommandResult =
   | { readonly ok: true; readonly events: readonly SimEvent[] }

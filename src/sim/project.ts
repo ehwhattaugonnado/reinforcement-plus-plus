@@ -168,6 +168,7 @@ function applyBehavioralEvent(
       atMs,
       config,
       creatureWithUpdates,
+      state.phase,
     )
     return {
       ...state,

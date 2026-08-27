@@ -42,6 +42,18 @@ button {
   padding: 0.5rem 1rem;
 }
 
+/*
+ * The CRF/VR/extinction stimulus-delivery target: the single most
+ * frequently pressed control in training, so it gets a target well above
+ * the plain button minimum (WCAG 2.2 AA "Target Size (Minimum)").
+ */
+.delivery-target {
+  min-height: 4.5rem;
+  min-width: 12rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
 :focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 2px;

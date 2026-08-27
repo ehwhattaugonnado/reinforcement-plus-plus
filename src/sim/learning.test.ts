@@ -179,6 +179,8 @@ describe('computeResponseRatePerMinute', () => {
       baselineRatePerMinute: 3,
       learnedStrength: 0,
       currentRatePerMinute: 3,
+      extinctionBurstPrimed: false,
+      extinctionBurstMagnitudeScale: 1,
     },
   }
 
@@ -267,6 +269,190 @@ describe('computeResponseRatePerMinute', () => {
   it('stays within the configured floor and ceiling', () => {
     const events = promptContingentSeries(50, 1)
     const rate = computeResponseRatePerMinute(events, 49, config, creature)
+    expect(rate).toBeLessThanOrEqual(config.responseRateCeilingPerMinute)
+    expect(rate).toBeGreaterThanOrEqual(config.responseRateFloorPerMinute)
+  })
+})
+
+describe('computeResponseRatePerMinute extinction-transition burst term', () => {
+  const primedCreature: Pick<CreatureState, 'stimuli' | 'targetBehavior'> = {
+    stimuli: [{ stimulusId: 'treat', basePreference: 0.8, currentValue: 0.8 }],
+    targetBehavior: {
+      behaviorId: 'spin',
+      baselineRatePerMinute: 3,
+      learnedStrength: 0,
+      currentRatePerMinute: 3,
+      extinctionBurstPrimed: true,
+      extinctionBurstMagnitudeScale: 1,
+    },
+  }
+  const unprimedCreature: Pick<CreatureState, 'stimuli' | 'targetBehavior'> = {
+    ...primedCreature,
+    targetBehavior: {
+      ...primedCreature.targetBehavior,
+      extinctionBurstPrimed: false,
+    },
+  }
+
+  it('does not appear outside the extinction phase, even for a primed creature', () => {
+    const events = promptContingentSeries(8, 1000)
+    const atPeak = 7000 + config.extinctionBurstPeakDelayMs
+    const withoutPhase = computeResponseRatePerMinute(
+      events,
+      atPeak,
+      config,
+      primedCreature,
+    )
+    const inCrf = computeResponseRatePerMinute(
+      events,
+      atPeak,
+      config,
+      primedCreature,
+      'crf',
+    )
+    const inVr = computeResponseRatePerMinute(
+      events,
+      atPeak,
+      config,
+      primedCreature,
+      'vr',
+    )
+    const ordinaryDecay = computeResponseRatePerMinute(
+      events,
+      atPeak,
+      config,
+      unprimedCreature,
+      'extinction',
+    )
+    expect(withoutPhase).toBeCloseTo(ordinaryDecay, 6)
+    expect(inCrf).toBeCloseTo(ordinaryDecay, 6)
+    expect(inVr).toBeCloseTo(ordinaryDecay, 6)
+  })
+
+  it('does not raise the rate above the ordinary recency-decay curve for an unprimed creature, even in extinction', () => {
+    const events = promptContingentSeries(8, 1000)
+    const atPeak = 7000 + config.extinctionBurstPeakDelayMs
+    const unprimedInExtinction = computeResponseRatePerMinute(
+      events,
+      atPeak,
+      config,
+      unprimedCreature,
+      'extinction',
+    )
+    const unprimedElsewhere = computeResponseRatePerMinute(
+      events,
+      atPeak,
+      config,
+      unprimedCreature,
+      'crf',
+    )
+    expect(unprimedInExtinction).toBeCloseTo(unprimedElsewhere, 6)
+  })
+
+  it('raises the rate above the ordinary recency-decay curve for a primed creature, at its peak delay, in extinction', () => {
+    const events = promptContingentSeries(8, 1000)
+    const atPeak = 7000 + config.extinctionBurstPeakDelayMs
+    const primedRate = computeResponseRatePerMinute(
+      events,
+      atPeak,
+      config,
+      primedCreature,
+      'extinction',
+    )
+    const ordinaryDecay = computeResponseRatePerMinute(
+      events,
+      atPeak,
+      config,
+      unprimedCreature,
+      'extinction',
+    )
+    expect(primedRate).toBeGreaterThan(ordinaryDecay)
+  })
+
+  it('is zero at the instant reinforcement stops and decays back toward the ordinary curve well after the peak', () => {
+    const events = promptContingentSeries(8, 1000)
+    const cessationMs = 7000
+    const atCessation = computeResponseRatePerMinute(
+      events,
+      cessationMs,
+      config,
+      primedCreature,
+      'extinction',
+    )
+    const ordinaryAtCessation = computeResponseRatePerMinute(
+      events,
+      cessationMs,
+      config,
+      unprimedCreature,
+      'extinction',
+    )
+    expect(atCessation).toBeCloseTo(ordinaryAtCessation, 6)
+
+    const longAfter = cessationMs + config.extinctionBurstPeakDelayMs * 20
+    const primedLongAfter = computeResponseRatePerMinute(
+      events,
+      longAfter,
+      config,
+      primedCreature,
+      'extinction',
+    )
+    const ordinaryLongAfter = computeResponseRatePerMinute(
+      events,
+      longAfter,
+      config,
+      unprimedCreature,
+      'extinction',
+    )
+    expect(primedLongAfter).toBeCloseTo(ordinaryLongAfter, 1)
+  })
+
+  it('scales with learned strength and delivered stimulus value, not an independent seeded magnitude', () => {
+    const strongEvents = promptContingentSeries(8, 1000)
+    const weakEvents = strongEvents.slice(0, 2) // far less learned strength
+    const atPeak = 7000 + config.extinctionBurstPeakDelayMs
+
+    const strongBump =
+      computeResponseRatePerMinute(
+        strongEvents,
+        atPeak,
+        config,
+        primedCreature,
+        'extinction',
+      ) -
+      computeResponseRatePerMinute(
+        strongEvents,
+        atPeak,
+        config,
+        unprimedCreature,
+        'extinction',
+      )
+    const weakBump =
+      computeResponseRatePerMinute(
+        weakEvents,
+        1500 + config.extinctionBurstPeakDelayMs,
+        config,
+        primedCreature,
+        'extinction',
+      ) -
+      computeResponseRatePerMinute(
+        weakEvents,
+        1500 + config.extinctionBurstPeakDelayMs,
+        config,
+        unprimedCreature,
+        'extinction',
+      )
+    expect(strongBump).toBeGreaterThan(weakBump)
+  })
+
+  it('stays within the configured floor and ceiling with a burst applied', () => {
+    const events = promptContingentSeries(50, 1)
+    const rate = computeResponseRatePerMinute(
+      events,
+      49 + config.extinctionBurstPeakDelayMs,
+      config,
+      primedCreature,
+      'extinction',
+    )
     expect(rate).toBeLessThanOrEqual(config.responseRateCeilingPerMinute)
     expect(rate).toBeGreaterThanOrEqual(config.responseRateFloorPerMinute)
   })
@@ -444,6 +630,14 @@ describe('the central causal invariant', () => {
     // function in the first place. This is a type-level guard as much as a
     // runtime one -- `applyBehavioralEvent`'s call site above only ever
     // passes `state.creature`, never `state.schedulePlan`.
-    expect(computeResponseRatePerMinute.length).toBe(4) // (events, atMs, config, creature)
+    //
+    // `phase` (baseline/crf/vr/extinction) is a distinct, documented rate
+    // input (data-model section 4 lists "optional extinction-transition
+    // state" alongside recency and stimulus value) -- unlike `schedulePlan`,
+    // it is not the learner's selected schedule *type*, only which round is
+    // running, and it is itself derived from logged `phase-changed` events.
+    // It has a default value, so `Function.length` (which excludes any
+    // parameter after the first with a default) still reports 4.
+    expect(computeResponseRatePerMinute.length).toBe(4) // (events, atMs, config, creature, phase = 'baseline')
   })
 })

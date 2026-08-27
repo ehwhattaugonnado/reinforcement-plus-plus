@@ -28,6 +28,17 @@ export {
   responseRateInWindow,
 } from './learning'
 export {
+  classifyDelivery,
+  crfAcquisitionMet,
+  crfCoachingDue,
+  crfRoundWindow,
+  deriveCrfMetrics,
+  deriveOutstandingCycle,
+  type CrfMetrics,
+  type DeliveryClassification,
+  type OutstandingCycle,
+} from './crf'
+export {
   buildCumulativeRecordChartData,
   buildResponseRateChartData,
   cumulativeRecordAnnotationsTable,

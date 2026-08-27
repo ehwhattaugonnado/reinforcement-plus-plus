@@ -177,16 +177,28 @@ invariant.
 - **Current response rate** — `baselineRatePerMinute` alone until the first
   experienced consequence; afterward,
   `baselineRatePerMinute + learnedStrength * influence * stimulusValue *
-  learningRateGainPerMinute`, where `influence =
-  exp(-timeSinceLastConsequenceMs / responseRateConsequenceDecayMs)` and
+  learningRateGainPerMinute + extinctionBurst`, where `influence =
+  exp(-timeSinceLastConsequenceMs / responseRateConsequenceDecayMs)`,
   `stimulusValue` is the *most recently delivered* stimulus's current value at
-  that instant. Clamped to `[responseRateFloorPerMinute,
-  responseRateCeilingPerMinute]`.
+  that instant, and `extinctionBurst` (Milestone 6) is zero unless the
+  current phase is `extinction` and the creature was seeded (once, at session
+  creation) as primed for a transient. When both hold, `extinctionBurst`
+  rises from zero at the moment reinforcement stops to a peak of
+  `extinctionBurstMagnitudeGainPerMinute * learnedStrength * stimulusValue *
+  extinctionBurstMagnitudeScale` at `extinctionBurstPeakDelayMs` after
+  cessation, then decays — never a step function. `extinctionBurstMagnitudeScale`
+  is a seeded `[0.5, 1.5]` per-creature multiplier, so primed creatures don't
+  all burst identically. Whole rate is clamped to
+  `[responseRateFloorPerMinute, responseRateCeilingPerMinute]`.
 
 None of the above ever reads `SchedulePlan`; `applyBehavioralEvent` has a
 dedicated Vitest suite ("the central causal invariant") asserting that
 folding an identical `stimulus-delivered` event onto two states that differ
-only in `schedulePlan` produces identical `creature` output.
+only in `schedulePlan` produces identical `creature` output. `phase`
+(baseline/crf/vr/extinction) is a distinct, intentional input — which round
+is running, not the learner's selected schedule type — and is itself derived
+from logged `phase-changed` events, so `computeResponseRatePerMinute` remains
+a pure function of the event log plus config.
 
 Repeated access gradually reduces a stimulus's `currentValue`. Limited
 recovery may occur while the app remains open, bounded by
@@ -211,12 +223,20 @@ used by later milestones' gates (Section 5); it is deliberately distinct from
 the seeded latent `creature.targetBehavior.baselineRatePerMinute`, which is
 an internal model input, not a claim about what was observed.
 
-Extinction transitions must be parameterized and seeded. The event-derived
-detector currently has constructed burst, no-burst, and indeterminate-log
-coverage; the live transition model and known model seeds for both burst and
-no-burst outcomes remain Milestone 6 work. The implementation must not treat a
-published clinical prevalence as a literal probability for the fictional
-creature.
+Extinction transitions are parameterized and seeded. `initial-state.ts` draws
+`extinctionBurstPrimed` once per creature against `extinctionBurstProbability`
+(default `0.5`, a simulation-tuning knob, not a claimed clinical prevalence)
+and a `[0.5, 1.5]` `extinctionBurstMagnitudeScale`; `learning.ts` reads both
+only when folding an event with `phase === 'extinction'`. The event-derived
+detector (`evidence.ts`) never sees either seeded field — it classifies
+burst/no-burst purely from the resulting `response-emitted` events, per the
+"no narrative burst flag" rule. Documented known seeds: `extinction-cohort-5`
+(primed, produces a `burst` verdict), `extinction-cohort-1` (unprimed,
+produces `no-burst-in-this-run`), and `extinction-cohort-2` (unprimed,
+produces `indeterminate`/`insufficient-samples` — the honest "too short to
+characterize" outcome, a real but no longer typical live result) — see
+`extinction-transition.test.ts`, which drives the real model and detector
+rather than hand-constructing a log.
 
 ## 5. Derived metrics
 
@@ -267,13 +287,23 @@ reinforced round immediately preceding extinction, measured within that round
 only and never bleeding into an earlier round. V1 permits entering extinction
 from VR only, so that round is always Round 2. If the available reference
 window is shorter than `burstMinReferenceWindowMs`, the reference rate is too
-noisy to compare against and the run is reported as neither a burst nor a
-confirmed no-burst: the debrief says the demonstration was too short to
-characterize and states that bursts are not inevitable. The rule is evaluated
-from the event log after the round, exactly like every other derived metric;
-the extinction model is never asked whether it "intended" a burst. When the
-rule is not met, the debrief states explicitly that no burst occurred in this
-run and that bursts are not inevitable.
+noisy to compare against and the run is reported `indeterminate` with reason
+`reference-window-too-short`. Independently, both the reference and detection
+windows must also contain at least their respective sample-count floor
+(`burstMinReferenceResponses`/`burstMinDetectionResponses` — separate
+because the two windows differ in duration and typical count) responses;
+otherwise the run is `indeterminate` with reason `insufficient-samples` —
+a duration floor alone does not stop a single extra (or missing) Poisson
+arrival from swinging a low-count window's rate across the burst thresholds
+on sampling noise alone. Either indeterminate reason means the run is neither
+a burst nor a confirmed no-burst: the debrief says the demonstration was too
+short to characterize and states that bursts are not inevitable. The rule is
+evaluated from the event log after the round, exactly like every other
+derived metric; the extinction model is never asked whether it "intended" a
+burst, and the detector never reads the seeded `extinctionBurstPrimed`/
+`extinctionBurstMagnitudeScale` fields that produced the model's actual
+output. When the rule is not met, the debrief states explicitly that no burst
+occurred in this run and that bursts are not inevitable.
 
 ## 6. Configuration constants
 
@@ -304,11 +334,16 @@ stamped into `session-started`.
 | `reinforcerEvidenceWindowMs` | 60000 simulated ms | Reinforcer-evidence rule |
 | `reinforcerEvidenceRelativeIncrease` | 0.20 | Reinforcer-evidence rule |
 | `reinforcerEvidenceAbsoluteIncrease` | 1.0 responses/min | Reinforcer-evidence rule |
-| `burstDetectionWindowMs` | 30000 simulated ms | Burst detection |
+| `burstDetectionWindowMs` | 90000 simulated ms | Burst detection |
 | `burstReferenceWindowMs` | 60000 simulated ms | Burst detection |
 | `burstMinReferenceWindowMs` | 20000 simulated ms | Burst detection floor |
 | `burstRelativeIncrease` | 0.50 | Burst detection |
 | `burstAbsoluteIncrease` | 2.0 responses/min | Burst detection |
+| `burstMinReferenceResponses` | 3 | Burst detection reference-window sample-count floor |
+| `burstMinDetectionResponses` | 6 | Burst detection detection-window sample-count floor |
+| `extinctionBurstProbability` | 0.5 | Extinction-transition seeding (Section 4) |
+| `extinctionBurstMagnitudeGainPerMinute` | 20 responses/min | Extinction-transition seeding (Section 4) |
+| `extinctionBurstPeakDelayMs` | 35000 simulated ms | Extinction-transition seeding (Section 4) |
 | `maxTickDeltaMs` | 250 wall-clock ms | Clock delta capping (see [Architecture Overview](overview.md)) |
 | `responseRateConsequenceDecayMs` | 20000 simulated ms | Response-rate decay toward baseline (Section 4) |
 | `learningRateGainPerMinute` | 6 responses/min | Response-rate model (Section 4) |

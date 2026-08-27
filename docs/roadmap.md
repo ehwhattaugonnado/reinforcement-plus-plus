@@ -48,13 +48,13 @@ status is:
 | 1 — Simulation foundation | Complete | Seeded RNG, controlled clock, typed atomic commands, immutable snapshots, config-aware replay, and deterministic tests are present. |
 | 2 — Assessment | Complete | Six seeded unique pairs, separate observed/recorded selections, hierarchy derivation, accessible UI, and tests are present. |
 | 3 — Baseline/learning | Complete | Render-frequency-independent response generation, baseline metrics, experienced-consequence learning, satiation/recovery, UI, and tests are present. |
-| 4 — CRF | Not started | `deliverStimulus` remains a noncontingent stub; cycle classification, timeouts, metrics, coaching, and advancement gates remain. |
+| 4 — CRF | Complete | `deliverStimulus` classifies contingency/timing/schedule fidelity independently via `src/sim/crf.ts`; one-outstanding-criterion cycles, due-window abandonment (one `criterion-missed`/`cycle-abandoned` pair per timeout), the acquisition gate, corrective-coaching detection, derived CRF metrics, and the CRF portion of `TrainingScreen` (delivery target, keyboard shortcut, status announcements) are present and tested. |
 | 5 — VR-3 | Not started | The phase/schedule shape exists, but requirement generation, cycle semantics, completion gates, UI, and tests remain. |
-| 6 — Extinction/evidence | Partial | Event-derived reinforcer-evidence and burst-detection rules are tested; the live seeded extinction transition and known model-seed coverage remain. |
-| 7 — Debrief/charts | Partial | Shared chart-data projectors and accessible visx chart views are tested; the mode-neutral session summary, debrief screen, live event table, and shell wiring remain. |
+| 6 — Extinction/evidence | Complete (behavior model + detector); UI remains | Event-derived reinforcer-evidence and burst-detection rules are tested, including asymmetric sample-count floors and a calibrated 90s detection window; `learning.ts` has a real seeded extinction-transition burst term (`extinctionBurstPrimed`/`extinctionBurstMagnitudeScale`, seeded once per creature) with documented known burst/no-burst/indeterminate seeds (`extinction-transition.test.ts`). Live outcomes are now a healthy mix of all three verdicts rather than dominated by any one — see the "Extinction-transition state" risk checkpoint below for measured rates. The extinction-round UI/screen wiring is separate, Milestone 7/8 work. |
+| 7 — Debrief/charts | Partial | Shared chart-data projectors and accessible visx chart views are tested and wired into Advanced-mode `TrainingScreen` (live cumulative-record/response-rate charts plus an accessible event table, both passing `elapsedSimMs` explicitly to avoid understating an idle open round); the mode-neutral session summary and debrief screen remain. |
 | 8 — Release hardening | Not started | Playwright currently covers shell smoke, controls, keyboard operation, and an automated axe pass, not the complete learner journey. |
 
-The next critical-path increment is Milestone 4, followed by Milestone 5.
+The next critical-path increment is Milestone 5.
 
 ## 3. Milestones
 
@@ -330,23 +330,28 @@ A milestone is complete only when:
 | Command-result signature | Resolved by ADR 0008 and implemented with typed, atomic command results. | Resolved |
 | Replay/config lookup contract | Resolved by ADR 0009 and implemented with version-aware replay rejection. | Resolved |
 | Learning-model calibration | The central causal invariant must remain true while behavior changes are visible within a short session. | Milestones 3–5, then cohort tuning in Milestone 8 |
-| Due-window and session-length tuning | A short due window can unfairly lower fidelity, while long coaching paths can exceed the session budget. | First playable CRF/VR slice; finalize in Milestone 8 |
+| Due-window and session-length tuning | A short due window can unfairly lower fidelity, while long coaching paths can exceed the session budget. New input from Milestone 6 calibration: the extinction round's burst-detection accuracy assumes comfortably more than `burstDetectionWindowMs` (90s) of simulated time after the first withheld criterion elapses inside the round; no production extinction-round-duration constant exists yet (Milestone 7/8 work), and whatever one is chosen must give the detection window room to complete, not merely exceed it. | First playable CRF/VR slice; extinction-round duration and finalize in Milestone 8 |
 | Learner-facing copy | Small wording errors can collapse preferred stimulus into reinforcer or overstate extinction outcomes. | Draft with each slice; SME gate before public release |
 | Accessibility under live timing | Announcements, focus behavior, and large controls must remain usable without changing scoring semantics. | Test in every timed slice, not only at release |
 | Probabilistic expectations | Idealized response curves and bursts must not be required for every seed. | Document cohort and tolerances by Milestone 6 |
-| `nowMs` wiring for live charts | `buildCumulativeRecordChartData` and `buildResponseRateChartData` (Milestone 7) default their time extent to the latest logged event; a live, still-open round left idle understates its own duration and so overstates its displayed rate unless the caller passes `state.elapsedSimMs` explicitly. Nothing is wired into `AppShell` yet, so nothing is wrong today, but the debrief/live-training wiring must not skip this argument. | Milestone 7 UI wiring / Milestone 8 hardening |
-| Extinction-transition state | Milestone 3's learning model does not separately model the "extinction-transition state" listed as a rate input in the data model (§4); it assumes the existing recency-decay term already produces the post-cessation decline Milestone 6's burst detector needs. Milestone 6's detector is tested only against hand-constructed logs, so this assumption is unfalsified — no test yet connects a live extinction round's actual output to the detector. | Milestone 6 behavior-model half / verify before Milestone 8 |
+| `nowMs` wiring for live charts | `buildCumulativeRecordChartData` and `buildResponseRateChartData` (Milestone 7) default their time extent to the latest logged event; a live, still-open round left idle understates its own duration and so overstates its displayed rate unless the caller passes `state.elapsedSimMs` explicitly. Resolved: the Advanced-mode `TrainingScreen` wiring passes `state.elapsedSimMs` explicitly, with a regression test constructing an idle open round and asserting against the buggy default. The debrief screen (not yet built) must follow the same pattern. | Resolved for live training; verify again when the debrief screen is built |
+| Extinction-transition state | Resolved. `learning.ts`'s `computeResponseRatePerMinute` has a real, seeded extinction-transition burst term (`extinctionBurstPrimed`/`extinctionBurstMagnitudeScale`, drawn once per creature), active only when `phase === 'extinction'`. `evidence.ts`'s `detectExtinctionBurst` has separate `burstMinReferenceResponses`/`burstMinDetectionResponses` sample-count floors (a single shared floor barely moved the false-positive rate; splitting by window did), plus a widened `burstDetectionWindowMs` (30s → 90s) and a re-centered `extinctionBurstPeakDelayMs` (15s → 35s, mid-window rather than near the start). Two calibration passes were needed: the first (floor split alone) cut the unprimed false-`burst` rate from ~28% to ~4% but, because the model's default 2-4/min rates rarely produce 6 responses in a 30s window, pushed ~65-70% of *all* live runs into `indeterminate` — nearly eliminating the documented "no burst occurred, bursts are not inevitable" debrief message (data-model.md §5) as a live outcome, not just the false positives. The second pass (window + peak-delay retune) fixed that: measured over a 150-seed cohort at current defaults, primed burst detection is ~61%, unprimed false-burst is ~10% (up slightly from the interim ~4%, still far below the original ~28-30%), and both `burst` and `no-burst-in-this-run` are common, reachable live outcomes (`extinction-transition.test.ts` asserts these bounds so they can't silently drift). Known, accepted residual: `responseRateCeilingPerMinute` (20/min, calibrated for ordinary CRF/VR responding) clamps a primed burst's true peak in ~6% of primed sessions at the chosen gain (20) — see `extinctionBurstMagnitudeGainPerMinute`'s doc comment in `config.ts` for the detection-vs-clamp tradeoff at higher gains. | Resolved |
 
 ## 7. Recommended Next Implementation Increment
 
-Implement Milestone 4 as the next vertical slice:
+Implement Milestone 5 as the next vertical slice, extending the same
+`TrainingScreen`, event projectors, coaching language, and cycle machinery
+Milestone 4 built rather than creating parallel VR state:
 
-1. associate CRF responses with one outstanding schedule criterion,
-2. classify delivery contingency, timing, and schedule fidelity independently,
-3. emit exactly one abandoned cycle per due-window timeout,
-4. derive CRF learner metrics and acquisition gates from the event log,
-5. add constructive coaching and accessible manual-delivery interaction, and
-6. verify successful and coached paths at both supported speeds.
+1. generate deterministic shuffled `[2, 3, 4]` requirement blocks (mean of
+   three) and response counting per cycle,
+2. implement eligibility cues and cycle reset semantics,
+3. handle premature/late delivery, overruns, missed criteria, abandoned
+   cycles, and incomplete end-of-round cycles the same way Milestone 4 does,
+4. end the round only after six completed on-schedule cycles, and
+5. verify bounded seeded VR sequences, cycle semantics, incomplete-cycle
+   exclusion, and that schedule selection alone never changes creature
+   behavior, plus an assessment-to-VR integration test.
 
-This closes the current delivery stub and provides the cycle machinery that
-guided VR-3 builds on next.
+This is the last piece of required-path interaction work before the shared
+debrief (Milestone 7) and release hardening (Milestone 8).

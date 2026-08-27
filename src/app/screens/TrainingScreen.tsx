@@ -1,12 +1,24 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   DEFAULT_SIM_CONFIG,
   STIMULUS_LABELS,
+  buildCumulativeRecordChartData,
+  buildResponseRateChartData,
+  crfAcquisitionMet,
+  crfCoachingDue,
+  deriveCrfMetrics,
+  deriveOutstandingCycle,
   isBaselineComplete,
   type SessionState,
   type SimSession,
   type StimulusId,
 } from '../../sim'
+import {
+  CumulativeRecordChart,
+  EventLogTable,
+  ResponseRateChart,
+} from '../charts'
+import type { Mode } from '../hooks/useMode'
 
 const PHASE_COPY: Record<string, string> = {
   baseline: 'Baseline: watching Pip on their own, before any training.',
@@ -24,9 +36,11 @@ const PHASE_COPY: Record<string, string> = {
 export function TrainingScreen({
   state,
   session,
+  mode = 'simple',
 }: {
   state: SessionState
   session: SimSession
+  mode?: Mode
 }) {
   const responseCount = useMemo(
     () => state.events.filter((e) => e.type === 'response-emitted').length,
@@ -44,6 +58,110 @@ export function TrainingScreen({
   const baselineDone =
     state.phase === 'baseline' &&
     isBaselineComplete(state.events, state.elapsedSimMs, DEFAULT_SIM_CONFIG)
+
+  // --- CRF acquisition (Milestone 4) ---
+
+  const stimuli = state.creature.stimuli
+  const [selectedStimulusId, setSelectedStimulusId] = useState<StimulusId>(
+    () =>
+      stimuli.reduce((best, s) =>
+        s.currentValue > best.currentValue ? s : best,
+      ).stimulusId as StimulusId,
+  )
+
+  const outstandingCycle = useMemo(
+    () => deriveOutstandingCycle(state.events, DEFAULT_SIM_CONFIG),
+    [state.events],
+  )
+  const crfMetrics = useMemo(
+    () => deriveCrfMetrics(state.events),
+    [state.events],
+  )
+  const acquisitionMet = useMemo(
+    () =>
+      crfAcquisitionMet(state.events, state.elapsedSimMs, DEFAULT_SIM_CONFIG),
+    [state.events, state.elapsedSimMs],
+  )
+  const coachingDue = useMemo(
+    () => crfCoachingDue(state.events, state.elapsedSimMs, DEFAULT_SIM_CONFIG),
+    [state.events, state.elapsedSimMs],
+  )
+
+  const deliver = useCallback(() => {
+    if (state.phase !== 'crf') return
+    void session.deliverStimulus(selectedStimulusId)
+  }, [session, state.phase, selectedStimulusId])
+
+  // Documented keyboard shortcut for the delivery target: "D", so a
+  // keyboard-only learner does not have to tab to the button after every
+  // response. Deliberately not Space/Enter (those already activate the
+  // focused button) and not a browser-reserved chord (no Ctrl/Cmd/Alt).
+  useEffect(() => {
+    if (state.phase !== 'crf') return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key.toLowerCase() === 'd' &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault()
+        deliver()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [state.phase, deliver])
+
+  const lastEvent = state.events[state.events.length - 1]
+  const lastDelivery =
+    lastEvent?.type === 'stimulus-delivered' ? lastEvent : undefined
+
+  const crfStatusText = (() => {
+    if (coachingDue) {
+      return (
+        `Coaching: acquisition has not been reached yet. Deliver right ` +
+        `after ${state.creature.name} responds, every time, for the ` +
+        `steadiest results.`
+      )
+    }
+    if (lastDelivery !== undefined) {
+      if (lastDelivery.contingency === 'noncontingent') {
+        return 'Delivered with no response to credit it to -- noncontingent.'
+      }
+      const timingText =
+        lastDelivery.timing === 'prompt'
+          ? 'promptly'
+          : 'later than the prompt window'
+      const fidelityText =
+        lastDelivery.scheduleFidelity === 'on-schedule'
+          ? 'on schedule'
+          : lastDelivery.scheduleFidelity === 'overrun'
+            ? 'after extra responses piled up (a schedule overrun)'
+            : 'before the schedule criterion was met (premature)'
+      return `Delivered ${timingText}, ${fidelityText}.`
+    }
+    if (outstandingCycle !== null) {
+      return `Reinforcement is due -- ${state.creature.name} just met the criterion. Deliver now.`
+    }
+    return `Waiting for ${state.creature.name} to respond.`
+  })()
+
+  // The current round is still open while training is in progress, so `now`
+  // must be passed explicitly as `state.elapsedSimMs` rather than left to
+  // default to the latest logged event — otherwise an idle open round
+  // understates its own duration and overstates its displayed rate (see
+  // `buildCumulativeRecordChartData`/`buildResponseRateChartData` in
+  // src/sim/chart-data.ts and docs/roadmap.md's Milestone 7 checkpoint).
+  const cumulativeRecordData = useMemo(
+    () => buildCumulativeRecordChartData(state.events, state.elapsedSimMs),
+    [state.events, state.elapsedSimMs],
+  )
+  const responseRateData = useMemo(
+    () =>
+      buildResponseRateChartData(state.events, undefined, state.elapsedSimMs),
+    [state.events, state.elapsedSimMs],
+  )
 
   return (
     <section aria-labelledby="training-heading">
@@ -81,6 +199,71 @@ export function TrainingScreen({
         </button>
       )}
 
+      {state.phase === 'crf' && (
+        <section aria-labelledby="crf-heading" className="crf-round">
+          <h3 id="crf-heading">CRF acquisition</h3>
+          <p>
+            Every response from {state.creature.name} earns reinforcement.
+            Choose what to deliver, then deliver it right after{' '}
+            {state.creature.name} responds -- promptness and consistency are
+            what build the association.
+          </p>
+
+          <fieldset>
+            <legend>What to deliver</legend>
+            {stimuli.map((s) => (
+              <label key={s.stimulusId}>
+                <input
+                  type="radio"
+                  name="crf-stimulus"
+                  checked={selectedStimulusId === s.stimulusId}
+                  onChange={() =>
+                    setSelectedStimulusId(s.stimulusId as StimulusId)
+                  }
+                />
+                {STIMULUS_LABELS[s.stimulusId as StimulusId]}
+              </label>
+            ))}
+          </fieldset>
+
+          <p role="status" className="crf-status">
+            {crfStatusText}
+          </p>
+
+          <button type="button" className="delivery-target" onClick={deliver}>
+            Deliver {STIMULUS_LABELS[selectedStimulusId]} to{' '}
+            {state.creature.name}
+          </button>
+          <p className="crf-shortcut-hint">
+            Keyboard shortcut: press <kbd>D</kbd> to deliver.
+          </p>
+
+          <p className="crf-progress">
+            On-schedule deliveries: {crfMetrics.onScheduleDeliveries} of{' '}
+            {DEFAULT_SIM_CONFIG.crfMinOnScheduleDeliveries} needed.{' '}
+            {crfMetrics.contingentDeliveryRate === null
+              ? 'No deliveries yet.'
+              : `Contingent-delivery rate: ${Math.round(
+                  crfMetrics.contingentDeliveryRate * 100,
+                )}%. Prompt-delivery rate: ${
+                  crfMetrics.promptDeliveryRate === null
+                    ? 'n/a'
+                    : `${Math.round(crfMetrics.promptDeliveryRate * 100)}%`
+                }.`}{' '}
+            Missed criteria: {crfMetrics.missedCriteria}. Premature deliveries:{' '}
+            {crfMetrics.prematureDeliveries}. Noncontingent deliveries:{' '}
+            {crfMetrics.noncontingentDeliveries}. Overruns:{' '}
+            {crfMetrics.overrunDeliveries}.
+          </p>
+
+          {acquisitionMet && (
+            <button type="button" onClick={() => void session.startRound('vr')}>
+              Advance to VR-3 maintenance
+            </button>
+          )}
+        </section>
+      )}
+
       <h3>Stimulus values</h3>
       <table>
         <caption className="visually-hidden">
@@ -101,6 +284,15 @@ export function TrainingScreen({
           ))}
         </tbody>
       </table>
+
+      {mode === 'advanced' && (
+        <section aria-labelledby="advanced-view-heading">
+          <h3 id="advanced-view-heading">Advanced live view</h3>
+          <CumulativeRecordChart data={cumulativeRecordData} />
+          <ResponseRateChart data={responseRateData} />
+          <EventLogTable events={state.events} />
+        </section>
+      )}
     </section>
   )
 }

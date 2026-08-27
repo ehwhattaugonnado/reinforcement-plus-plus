@@ -14,7 +14,7 @@ import type { SessionState } from './types'
 export function createInitialState(
   seed: string,
   speed: 0.5 | 1,
-  _config: SimConfig,
+  config: SimConfig,
 ): SessionState {
   const setupRng = createRng(seed, 'setup')
 
@@ -30,6 +30,20 @@ export function createInitialState(
   })
 
   const baselineRatePerMinute = 2 + setupRng.next() * 2
+
+  // The six unique pairs are generated once, in seeded order, with seeded
+  // left/right placement (core loop, Phase A).
+  const plannedPairs = setupRng
+    .shuffle(allUniquePairs())
+    .map((pair) =>
+      setupRng.next() < 0.5 ? pair : ([pair[1], pair[0]] as const),
+    )
+
+  // Drawn last, after every other setupRng usage above, so no existing
+  // seed's assessment pairs or baseline rate shift.
+  const extinctionBurstPrimed =
+    setupRng.next() < config.extinctionBurstProbability
+  const extinctionBurstMagnitudeScale = 0.5 + setupRng.next() * 1
 
   return {
     id: `session-${seed}`,
@@ -48,16 +62,12 @@ export function createInitialState(
         baselineRatePerMinute,
         learnedStrength: 0,
         currentRatePerMinute: baselineRatePerMinute,
+        extinctionBurstPrimed,
+        extinctionBurstMagnitudeScale,
       },
     },
     assessment: {
-      // The six unique pairs are generated once, in seeded order, with seeded
-      // left/right placement (core loop, Phase A).
-      plannedPairs: setupRng
-        .shuffle(allUniquePairs())
-        .map((pair) =>
-          setupRng.next() < 0.5 ? pair : ([pair[1], pair[0]] as const),
-        ),
+      plannedPairs,
       trials: [],
       currentTrialIndex: 0,
       complete: false,

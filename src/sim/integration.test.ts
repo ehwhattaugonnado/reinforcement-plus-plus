@@ -16,12 +16,13 @@ import { createInitialState } from './initial-state'
  * consumers — that they agree on field names, round boundaries, and what
  * counts as "the CRF round's response rate". This file is that proof.
  *
- * The log below is still hand-constructed, not driven through
- * `session.deliverStimulus`, because that command is still Milestone 1's
- * always-noncontingent stub — classification is Milestone 4's job, not
- * built yet. So this is the closest thing to an end-to-end check available
- * before Milestone 4 lands: same event shapes Milestone 4 will eventually
- * produce, fed to every downstream consumer at once.
+ * The log below is still hand-constructed rather than driven through
+ * `session.deliverStimulus` (now real as of Milestone 4; see `crf.test.ts`
+ * and `session.test.ts`'s "CRF acquisition" suite for tests that exercise
+ * live classification). Keeping this one hand-built isolates it from the
+ * live response-generation RNG, so it stays a fast, exact proof that every
+ * downstream consumer agrees on field names and round boundaries for one
+ * fixed, realistic log.
  */
 
 const SEED = 'integration-seed'

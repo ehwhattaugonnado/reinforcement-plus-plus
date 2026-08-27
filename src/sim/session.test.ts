@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { CONFIG_VERSION, DEFAULT_SIM_CONFIG } from './config'
+import { CONFIG_VERSION, DEFAULT_SIM_CONFIG, type SimConfig } from './config'
+import { crfAcquisitionMet, crfCoachingDue, deriveCrfMetrics } from './crf'
 import { isBaselineComplete } from './learning'
 import { createSession } from './session'
 import { replay } from './replay'
@@ -18,6 +19,41 @@ function completeAssessment(session: ReturnType<typeof createSession>) {
       session.recordObservedSelection(current?.creatureSelection ?? null).ok,
     ).toBe(true)
   }
+}
+
+/** Runs assessment + baseline, then enters CRF. Returns the ready session. */
+function crfSession(
+  seed: string,
+  config: Partial<SimConfig> = {},
+): ReturnType<typeof createSession> {
+  const s = createSession({ seed, config })
+  completeAssessment(s)
+  expect(s.startRound('baseline').ok).toBe(true)
+  for (let i = 0; i < DEFAULT_SIM_CONFIG.baselineDurationMs / 50; i++)
+    s.tick(50)
+  expect(s.startRound('crf').ok).toBe(true)
+  return s
+}
+
+/** Ticks in `stepMs` increments until at least one new response-emitted appears, or `guard` steps pass. */
+function tickUntilNextResponse(
+  session: ReturnType<typeof createSession>,
+  stepMs: number,
+  guard = 5000,
+): boolean {
+  const before = session
+    .getSnapshot()
+    .events.filter((e) => e.type === 'response-emitted').length
+  let steps = 0
+  while (
+    session.getSnapshot().events.filter((e) => e.type === 'response-emitted')
+      .length === before &&
+    steps < guard
+  ) {
+    session.tick(stepMs)
+    steps++
+  }
+  return steps < guard
 }
 
 describe('session start', () => {
@@ -169,7 +205,16 @@ describe('invalid commands are atomic', () => {
   })
 
   it('enforces round order', () => {
-    const s = createSession({ seed: SEED })
+    // The CRF acquisition gate (Milestone 4) is exercised separately below;
+    // here it is trivially satisfied so this test isolates round order.
+    const s = createSession({
+      seed: SEED,
+      config: {
+        crfMinOnScheduleDeliveries: 0,
+        crfAcquisitionRelativeIncrease: 0,
+        crfAcquisitionAbsoluteIncrease: 0,
+      },
+    })
     completeAssessment(s)
     expect(s.startRound('vr')).toMatchObject({ reason: 'wrong-phase' })
     expect(s.startRound('baseline').ok).toBe(true)
@@ -179,6 +224,16 @@ describe('invalid commands are atomic', () => {
     expect(s.startRound('crf').ok).toBe(true)
     expect(s.startRound('vr').ok).toBe(true)
     expect(s.startRound('extinction').ok).toBe(true)
+  })
+
+  it('rejects crf -> vr until the acquisition gate is met', () => {
+    const s = createSession({ seed: SEED })
+    completeAssessment(s)
+    s.startRound('baseline')
+    s.startRound('crf')
+    expect(s.startRound('vr')).toMatchObject({
+      reason: 'acquisition-not-met',
+    })
   })
 })
 
@@ -336,14 +391,24 @@ describe('free-operant response process', () => {
     // `responseRng` draws. `startRound`'s own result is checked at each step
     // -- a silently-rejected command (e.g. round order regressing) would
     // otherwise leave both sessions in the same phase and pass vacuously.
-    const a = createSession({ seed: 'invariant-run' })
+    // The CRF acquisition gate (Milestone 4) is irrelevant to this
+    // response-generation invariant and is trivially satisfied on both
+    // sessions so `b`'s immediate crf -> vr transition is not itself the
+    // thing under test.
+    const gateBypass = {
+      crfMinOnScheduleDeliveries: 0,
+      crfAcquisitionRelativeIncrease: 0,
+      crfAcquisitionAbsoluteIncrease: 0,
+    }
+
+    const a = createSession({ seed: 'invariant-run', config: gateBypass })
     completeAssessment(a)
     expect(a.startRound('baseline').ok).toBe(true)
     for (let i = 0; i < 20; i++) a.tick(50)
     expect(a.startRound('crf').ok).toBe(true)
     for (let i = 0; i < 20; i++) a.tick(50)
 
-    const b = createSession({ seed: 'invariant-run' })
+    const b = createSession({ seed: 'invariant-run', config: gateBypass })
     completeAssessment(b)
     expect(b.startRound('baseline').ok).toBe(true)
     for (let i = 0; i < 20; i++) b.tick(50)
@@ -409,5 +474,239 @@ describe('free-operant response process', () => {
     expect(withAtLeastOne).toBeGreaterThanOrEqual(
       Math.ceil(SEED_COHORT.length * 0.8),
     )
+  })
+})
+
+describe('CRF acquisition and delivery classification (Milestone 4)', () => {
+  // Relative/absolute thresholds pushed deeply negative so the rate clause
+  // is always satisfied regardless of the actual (seeded, sparse) response
+  // timing: these tests isolate the on-schedule-delivery-count clause and
+  // the round-transition/coaching mechanics, not the rate math, which
+  // `crf.test.ts` already covers exhaustively as a pure function.
+  const EASY_GATE: Partial<SimConfig> = {
+    crfMinOnScheduleDeliveries: 3,
+    crfAcquisitionRelativeIncrease: -1,
+    crfAcquisitionAbsoluteIncrease: -1000,
+  }
+
+  function lastDelivery(
+    session: ReturnType<typeof createSession>,
+  ): Extract<SimEvent, { type: 'stimulus-delivered' }> {
+    const last = session.getSnapshot().events.at(-1)
+    expect(last?.type).toBe('stimulus-delivered')
+    return last as Extract<SimEvent, { type: 'stimulus-delivered' }>
+  }
+
+  it('classifies a prompt delivery right after a response as contingent, prompt, and on-schedule', () => {
+    const s = crfSession('crf-classify-1')
+    expect(tickUntilNextResponse(s, 50)).toBe(true)
+    const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
+    expect(s.deliverStimulus(stimulusId).ok).toBe(true)
+    const last = lastDelivery(s)
+    expect(last.contingency).toBe('response-contingent')
+    expect(last.timing).toBe('prompt')
+    expect(last.scheduleFidelity).toBe('on-schedule')
+  })
+
+  it('classifies a delivery with no recent response as noncontingent and not-applicable', () => {
+    const s = crfSession('crf-classify-2')
+    const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
+    expect(s.deliverStimulus(stimulusId).ok).toBe(true)
+    const last = lastDelivery(s)
+    expect(last.contingency).toBe('noncontingent')
+    expect(last.timing).toBe('no-response')
+    expect(last.scheduleFidelity).toBe('not-applicable')
+  })
+
+  it('classifies a delayed-but-only delivery as on-schedule (timing and fidelity are independent)', () => {
+    const s = crfSession('crf-classify-3', { promptDeliveryWindowMs: 1 })
+    expect(tickUntilNextResponse(s, 50)).toBe(true)
+    s.tick(50) // push latency past the (deliberately tiny) prompt window
+    const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
+    expect(s.deliverStimulus(stimulusId).ok).toBe(true)
+    const last = lastDelivery(s)
+    expect(last.contingency).toBe('response-contingent')
+    expect(last.timing).toBe('delayed')
+    expect(last.scheduleFidelity).toBe('on-schedule')
+  })
+
+  it('a delivery is rejected outside crf/vr/extinction (wrong-phase, atomic)', () => {
+    const s = createSession({ seed: 'crf-wrong-phase' })
+    const before = s.getSnapshot()
+    const result = s.deliverStimulus('treat')
+    expect(result).toMatchObject({ reason: 'wrong-phase' })
+    expect(s.getSnapshot()).toBe(before)
+  })
+
+  it('reaches the acquisition gate through repeated prompt on-schedule delivery and can then advance to VR', () => {
+    const s = crfSession('crf-acquire-1', EASY_GATE)
+    for (let i = 0; i < 3; i++) {
+      expect(tickUntilNextResponse(s, 50)).toBe(true)
+      const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
+      expect(s.deliverStimulus(stimulusId).ok).toBe(true)
+      expect(lastDelivery(s).scheduleFidelity).toBe('on-schedule')
+    }
+    const resolvedConfig = { ...DEFAULT_SIM_CONFIG, ...EASY_GATE }
+    expect(
+      crfAcquisitionMet(
+        s.getSnapshot().events,
+        s.getSnapshot().elapsedSimMs,
+        resolvedConfig,
+      ),
+    ).toBe(true)
+    expect(s.startRound('vr').ok).toBe(true)
+    expect(s.getSnapshot().phase).toBe('vr')
+  })
+
+  it('rejects crf -> vr and reports coaching as due once crfCoachingPauseMs elapses without meeting the gate', () => {
+    const config: Partial<SimConfig> = { crfCoachingPauseMs: 500 }
+    const s = crfSession('crf-coach-1', config)
+    const resolvedConfig = { ...DEFAULT_SIM_CONFIG, ...config }
+    expect(
+      crfCoachingDue(
+        s.getSnapshot().events,
+        s.getSnapshot().elapsedSimMs,
+        resolvedConfig,
+      ),
+    ).toBe(false)
+
+    for (let i = 0; i < 20; i++) s.tick(50) // 1000ms simulated, past the 500ms pause
+
+    expect(
+      crfCoachingDue(
+        s.getSnapshot().events,
+        s.getSnapshot().elapsedSimMs,
+        resolvedConfig,
+      ),
+    ).toBe(true)
+    expect(s.startRound('vr')).toMatchObject({
+      reason: 'acquisition-not-met',
+    })
+  })
+
+  describe('the one-abandoned-cycle-per-timeout invariant (session-level)', () => {
+    it('an elapsed due window with no delivery contributes exactly one criterion-missed and one cycle-abandoned', () => {
+      const s = crfSession('crf-timeout-1', { reinforcementDueWindowMs: 500 })
+      expect(tickUntilNextResponse(s, 25)).toBe(true)
+      const beforeCount = s.getSnapshot().events.length
+
+      for (let i = 0; i < 400; i++) s.tick(25) // 10s sim, well past the 500ms due window
+
+      const newEvents = s.getSnapshot().events.slice(beforeCount)
+      expect(
+        newEvents.filter((e) => e.type === 'criterion-missed'),
+      ).toHaveLength(1)
+      expect(
+        newEvents.filter((e) => e.type === 'cycle-abandoned'),
+      ).toHaveLength(1)
+
+      const metrics = deriveCrfMetrics(s.getSnapshot().events)
+      expect(metrics.missedCriteria).toBe(1)
+      expect(metrics.abandonedCycles).toBe(1)
+    })
+
+    it('a response opens a fresh, independently classified cycle after abandonment', () => {
+      const s = crfSession('crf-timeout-2', { reinforcementDueWindowMs: 500 })
+      expect(tickUntilNextResponse(s, 25)).toBe(true)
+      for (let i = 0; i < 400; i++) s.tick(25)
+      expect(
+        s.getSnapshot().events.some((e) => e.type === 'cycle-abandoned'),
+      ).toBe(true)
+
+      expect(tickUntilNextResponse(s, 25)).toBe(true)
+      const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
+      expect(s.deliverStimulus(stimulusId).ok).toBe(true)
+      const last = lastDelivery(s)
+      expect(last.contingency).toBe('response-contingent')
+      expect(last.scheduleFidelity).toBe('on-schedule')
+    })
+  })
+
+  it('abandons a cycle with reason "round-ended" (and no criterion-missed) when leaving CRF with reinforcement still due', () => {
+    const s = crfSession('crf-round-end-1', {
+      ...EASY_GATE,
+      reinforcementDueWindowMs: 10_000_000, // never times out on its own within this test
+    })
+    // Satisfy the acquisition gate with three on-schedule deliveries.
+    for (let i = 0; i < 3; i++) {
+      expect(tickUntilNextResponse(s, 50)).toBe(true)
+      const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
+      expect(s.deliverStimulus(stimulusId).ok).toBe(true)
+    }
+    // One more response opens a cycle that is deliberately left outstanding.
+    expect(tickUntilNextResponse(s, 50)).toBe(true)
+    expect(
+      s.getSnapshot().events.filter((e) => e.type === 'criterion-met').length,
+    ).toBe(4)
+    const missedBefore = s
+      .getSnapshot()
+      .events.filter((e) => e.type === 'criterion-missed').length
+
+    expect(s.startRound('vr').ok).toBe(true)
+
+    const events = s.getSnapshot().events
+    const abandonments = events.filter((e) => e.type === 'cycle-abandoned')
+    expect(abandonments).toHaveLength(1)
+    expect(abandonments[0]).toMatchObject({ reason: 'round-ended' })
+    // Round-ended abandonment is not a missed-criteria event (core-loop.md:
+    // "the only way a criterion is missed" is a due-window timeout).
+    expect(events.filter((e) => e.type === 'criterion-missed').length).toBe(
+      missedBefore,
+    )
+  })
+})
+
+describe('CRF timing invariance across speeds (Milestone 4)', () => {
+  /**
+   * Drives two sessions through matched *simulated* time (`tick(50)` at 1x
+   * vs `tick(100)` at 0.5x both advance 50 simulated ms per step) and
+   * asserts identical classifications, latencies, and prompt-delivery rate
+   * -- the slower speed setting must carry no scoring penalty or bonus
+   * (docs/accessibility.md; data-model section 3).
+   */
+  it('produces identical delivery classification and prompt-delivery rate at 0.5x and 1x for matched simulated time', () => {
+    const seed = 'crf-speed-invariance-1'
+    const fast = createSession({ seed, speed: 1 })
+    const slow = createSession({ seed, speed: 0.5 })
+    for (const s of [fast, slow]) {
+      completeAssessment(s)
+      expect(s.startRound('baseline').ok).toBe(true)
+    }
+    for (let i = 0; i < DEFAULT_SIM_CONFIG.baselineDurationMs / 50; i++) {
+      fast.tick(50)
+      slow.tick(100)
+    }
+    for (const s of [fast, slow]) expect(s.startRound('crf').ok).toBe(true)
+
+    expect(tickUntilNextResponse(fast, 50)).toBe(true)
+    expect(tickUntilNextResponse(slow, 100)).toBe(true)
+    expect(fast.getSnapshot().elapsedSimMs).toBeCloseTo(
+      slow.getSnapshot().elapsedSimMs,
+      6,
+    )
+
+    const stimulusIdFast = fast.getSnapshot().creature.stimuli[0]!.stimulusId
+    const stimulusIdSlow = slow.getSnapshot().creature.stimuli[0]!.stimulusId
+    expect(stimulusIdFast).toBe(stimulusIdSlow)
+
+    expect(fast.deliverStimulus(stimulusIdFast).ok).toBe(true)
+    expect(slow.deliverStimulus(stimulusIdSlow).ok).toBe(true)
+
+    const fastDelivery = fast.getSnapshot().events.at(-1) as Extract<
+      SimEvent,
+      { type: 'stimulus-delivered' }
+    >
+    const slowDelivery = slow.getSnapshot().events.at(-1) as Extract<
+      SimEvent,
+      { type: 'stimulus-delivered' }
+    >
+    expect(slowDelivery.contingency).toBe(fastDelivery.contingency)
+    expect(slowDelivery.timing).toBe(fastDelivery.timing)
+    expect(slowDelivery.scheduleFidelity).toBe(fastDelivery.scheduleFidelity)
+    expect(slowDelivery.latencyMs).toBeCloseTo(fastDelivery.latencyMs!, 6)
+
+    const fastMetrics = deriveCrfMetrics(fast.getSnapshot().events)
+    const slowMetrics = deriveCrfMetrics(slow.getSnapshot().events)
+    expect(slowMetrics.promptDeliveryRate).toBe(fastMetrics.promptDeliveryRate)
   })
 })

@@ -279,7 +279,7 @@ describe('detectExtinctionBurst', () => {
       vrEnd: 60000,
       vrResponseCount: 6, // 6/min reference
       anchorOffsetMs: 100,
-      detectionResponseCount: 12, // 24/min in a fixed 30000ms window
+      detectionResponseCount: 36, // 24/min in the fixed 90000ms detection window
       detectionEndMs: 60100 + DETECTION_WINDOW_MS,
     })
     const result = detectExtinctionBurst(log, DEFAULT_SIM_CONFIG)
@@ -297,16 +297,16 @@ describe('detectExtinctionBurst', () => {
     const log = fixedWindowLog({
       vrStart: 0,
       vrEnd: 60000,
-      vrResponseCount: 6, // 6/min reference
+      vrResponseCount: 12, // 12/min reference; clears burstMinReferenceResponses
       anchorOffsetMs: 100,
-      detectionResponseCount: 3, // 6/min: no increase at all
+      detectionResponseCount: 18, // 12/min: no increase, clears burstMinDetectionResponses
       detectionEndMs: 60100 + DETECTION_WINDOW_MS,
     })
     const result = detectExtinctionBurst(log, DEFAULT_SIM_CONFIG)
     expect(result.kind).toBe('no-burst-in-this-run')
     if (result.kind !== 'no-burst-in-this-run') throw new Error('unreachable')
-    expect(result.comparison.reference.perMinute).toBeCloseTo(6.0, 6)
-    expect(result.comparison.observed.perMinute).toBeCloseTo(6.0, 6)
+    expect(result.comparison.reference.perMinute).toBeCloseTo(12.0, 6)
+    expect(result.comparison.observed.perMinute).toBeCloseTo(12.0, 6)
     expect(result.unmet).toEqual(['relative-increase', 'absolute-increase'])
   })
 
@@ -342,8 +342,11 @@ describe('detectExtinctionBurst', () => {
     })
     const result = detectExtinctionBurst(log, DEFAULT_SIM_CONFIG)
     expect(result.kind).toBe('indeterminate')
-    if (result.kind !== 'indeterminate') throw new Error('unreachable')
-    expect(result.reason).toBe('reference-window-too-short')
+    if (
+      result.kind !== 'indeterminate' ||
+      result.reason !== 'reference-window-too-short'
+    )
+      throw new Error('unreachable')
     expect(result.availableReferenceWindowMs).toBe(10000)
     expect(result.reinforcedRoundDurationMs).toBe(10000)
     expect(result.referenceRound).toBe('vr')
@@ -397,15 +400,16 @@ describe('detectExtinctionBurst', () => {
     expect(at05x).toEqual(at1x)
   })
 
-  it('agrees relativeIncrease with relativeThresholdMet when the reference rate is zero', () => {
-    // ref === 0 makes the ordinary ratio undefined. `relativeIncrease` and
-    // `relativeThresholdMet` must never disagree (e.g. reporting "0%
-    // increase" alongside "threshold met"): both must key off whether any
-    // response was observed at all.
+  it('a zero-response reference window is now insufficient-samples, not a confident no-burst -- but the underlying relativeIncrease/relativeThresholdMet agreement still holds on the attached comparison', () => {
+    // ref === 0 makes the ordinary ratio undefined, and a reference window
+    // with zero responses can never clear burstMinReferenceResponses either, so
+    // this is `indeterminate` by construction now (not a confident
+    // 'no-burst-in-this-run'). `relativeIncrease` and `relativeThresholdMet`
+    // must still never disagree on the comparison this result carries.
     const zeroRefNoObserved = fixedWindowLog({
       vrStart: 0,
       vrEnd: 60000,
-      vrResponseCount: 0, // reference rate 0/min
+      vrResponseCount: 0, // reference rate 0/min: below burstMinReferenceResponses
       anchorOffsetMs: 100,
       detectionResponseCount: 0, // observed rate also 0/min: no increase
       detectionEndMs: 60100 + DETECTION_WINDOW_MS,
@@ -414,8 +418,11 @@ describe('detectExtinctionBurst', () => {
       zeroRefNoObserved,
       DEFAULT_SIM_CONFIG,
     )
-    expect(noIncrease.kind).toBe('no-burst-in-this-run')
-    if (noIncrease.kind !== 'no-burst-in-this-run')
+    expect(noIncrease.kind).toBe('indeterminate')
+    if (
+      noIncrease.kind !== 'indeterminate' ||
+      noIncrease.reason !== 'insufficient-samples'
+    )
       throw new Error('unreachable')
     expect(noIncrease.comparison.relativeIncrease).toBe(0)
     expect(noIncrease.comparison.relativeThresholdMet).toBe(false)
@@ -423,7 +430,7 @@ describe('detectExtinctionBurst', () => {
     const zeroRefWithObserved = fixedWindowLog({
       vrStart: 0,
       vrEnd: 60000,
-      vrResponseCount: 0, // reference rate 0/min
+      vrResponseCount: 0, // reference rate 0/min: below burstMinReferenceResponses
       anchorOffsetMs: 100,
       detectionResponseCount: 5, // any response is an infinite relative increase
       detectionEndMs: 60100 + DETECTION_WINDOW_MS,
@@ -432,13 +439,59 @@ describe('detectExtinctionBurst', () => {
       zeroRefWithObserved,
       DEFAULT_SIM_CONFIG,
     )
+    expect(withIncrease.kind).toBe('indeterminate')
     if (
-      withIncrease.kind !== 'burst' &&
-      withIncrease.kind !== 'no-burst-in-this-run'
+      withIncrease.kind !== 'indeterminate' ||
+      withIncrease.reason !== 'insufficient-samples'
     )
       throw new Error('unreachable')
     expect(withIncrease.comparison.relativeIncrease).toBe(Infinity)
     expect(withIncrease.comparison.relativeThresholdMet).toBe(true)
+  })
+
+  describe('sample-count floor (asymmetric: reference and detection windows have different durations and typical counts)', () => {
+    it('reports indeterminate when the reference window has fewer than burstMinReferenceResponses responses, even though its duration clears burstMinReferenceWindowMs', () => {
+      const log = fixedWindowLog({
+        vrStart: 0,
+        vrEnd: 60000, // duration clears burstMinReferenceWindowMs (20000)
+        vrResponseCount: 2, // below burstMinReferenceResponses (3)
+        anchorOffsetMs: 100,
+        detectionResponseCount: 12, // would otherwise read as a clear burst
+        detectionEndMs: 60100 + DETECTION_WINDOW_MS,
+      })
+      const result = detectExtinctionBurst(log, DEFAULT_SIM_CONFIG)
+      expect(result.kind).toBe('indeterminate')
+      if (result.kind !== 'indeterminate') throw new Error('unreachable')
+      expect(result.reason).toBe('insufficient-samples')
+    })
+
+    it('reports indeterminate when the detection window has fewer than burstMinDetectionResponses responses', () => {
+      const log = fixedWindowLog({
+        vrStart: 0,
+        vrEnd: 60000,
+        vrResponseCount: 6,
+        anchorOffsetMs: 100,
+        detectionResponseCount: 3, // below burstMinDetectionResponses (6)
+        detectionEndMs: 60100 + DETECTION_WINDOW_MS,
+      })
+      const result = detectExtinctionBurst(log, DEFAULT_SIM_CONFIG)
+      expect(result.kind).toBe('indeterminate')
+      if (result.kind !== 'indeterminate') throw new Error('unreachable')
+      expect(result.reason).toBe('insufficient-samples')
+    })
+
+    it('still detects a burst when both windows clear their respective sample-count floors', () => {
+      const log = fixedWindowLog({
+        vrStart: 0,
+        vrEnd: 60000,
+        vrResponseCount: 6,
+        anchorOffsetMs: 100,
+        detectionResponseCount: 36, // 24/min in the fixed 90000ms detection window
+        detectionEndMs: 60100 + DETECTION_WINDOW_MS,
+      })
+      const result = detectExtinctionBurst(log, DEFAULT_SIM_CONFIG)
+      expect(result.kind).toBe('burst')
+    })
   })
 
   it('is not-evaluable when there is no extinction round', () => {

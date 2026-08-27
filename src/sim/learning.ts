@@ -178,17 +178,48 @@ export function msSinceLastConsequence(
 }
 
 /**
+ * A primed creature's transient extinction-burst contribution at `recencyMs`
+ * since the last experienced consequence: zero at cessation, rising to
+ * `magnitude` at `config.extinctionBurstPeakDelayMs`, then decaying -- never
+ * a step function. `magnitude` scales with the same `learnedStrength *
+ * stimulusValue` factors as the ordinary post-delivery rate term, so a
+ * creature with a weaker reinforcement history has a smaller possible burst.
+ */
+function extinctionBurstContribution(
+  recencyMs: number,
+  learnedStrength: number,
+  stimulusValue: number,
+  config: SimConfig,
+  magnitudeScale: number,
+): number {
+  const magnitude =
+    config.extinctionBurstMagnitudeGainPerMinute *
+    learnedStrength *
+    stimulusValue *
+    magnitudeScale
+  const peakMs = config.extinctionBurstPeakDelayMs
+  const x = recencyMs / peakMs
+  return magnitude * x * Math.exp(1 - x)
+}
+
+/**
  * The creature's current response rate at `atMs`. Baseline rate plus a
  * learned-strength contribution that decays with time since the last
- * experienced consequence and scales with that stimulus's current value.
- * The selected schedule is never an input (ADR 0003, central causal
- * invariant).
+ * experienced consequence and scales with that stimulus's current value,
+ * plus an optional extinction-transition burst term active only in the
+ * `extinction` phase for a creature seeded as primed for one (data-model
+ * section 4). The selected schedule is never an input (ADR 0003, central
+ * causal invariant); `phase` is a distinct, documented rate input -- which
+ * round is running, not the learner's selected schedule type -- and is
+ * itself derived from logged `phase-changed` events, so this remains a pure
+ * function of the event log plus config.
  */
 export function computeResponseRatePerMinute(
   events: readonly SimEvent[],
   atMs: number,
   config: SimConfig,
   creature: Pick<CreatureState, 'stimuli' | 'targetBehavior'>,
+  phase: Phase = 'baseline',
 ): number {
   const learnedStrength = deriveLearnedStrength(events, atMs, config)
   const recencyMs = msSinceLastConsequence(events, atMs)
@@ -214,9 +245,21 @@ export function computeResponseRatePerMinute(
           config,
         )
 
+  const burst =
+    phase === 'extinction' && creature.targetBehavior.extinctionBurstPrimed
+      ? extinctionBurstContribution(
+          recencyMs,
+          learnedStrength,
+          value,
+          config,
+          creature.targetBehavior.extinctionBurstMagnitudeScale,
+        )
+      : 0
+
   const rate =
     creature.targetBehavior.baselineRatePerMinute +
-    learnedStrength * influence * value * config.learningRateGainPerMinute
+    learnedStrength * influence * value * config.learningRateGainPerMinute +
+    burst
 
   return clamp(
     rate,
