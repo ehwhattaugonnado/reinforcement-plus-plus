@@ -109,6 +109,12 @@ export type CommandRejectionReason =
    * `crfAcquisitionMet` in `crf.ts`.
    */
   | 'acquisition-not-met'
+  /**
+   * VR -> extinction only (Milestone 5): rejected until
+   * `vrCyclesToComplete` on-schedule VR cycles have completed
+   * (data-model section 6). See `vrCyclesCompleted` in `vr.ts`.
+   */
+  | 'vr-cycles-not-met'
 
 export type CommandResult =
   | { readonly ok: true; readonly events: readonly SimEvent[] }

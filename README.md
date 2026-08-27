@@ -17,6 +17,9 @@ application currently includes:
 - baseline response generation and an experienced-consequence learning model;
 - CRF delivery classification, acquisition gates, corrective coaching, and an
   accessible manual-delivery training screen;
+- guided VR-3 maintenance: a seeded ratio-requirement sequence, live
+  schedule-state derivation, the round-order completion gate, coaching, and
+  the matching training screen UI;
 - event-derived reinforcer-evidence and extinction-burst rules, including a
   live seeded extinction-transition model calibrated against a 150-seed
   cohort;
@@ -26,10 +29,10 @@ application currently includes:
 - Vitest, React Testing Library, Playwright smoke, and automated accessibility
   coverage.
 
-The complete learner path is not ready yet. Guided VR-3 maintenance cycles,
-the extinction round's own UI/timing, the shared debrief screen, and release
-hardening remain. See the [implementation roadmap](docs/roadmap.md) for the
-detailed status and sequence.
+The complete learner path is not ready yet. The extinction round's own
+UI/timing, the shared debrief screen, and release hardening remain. See the
+[implementation roadmap](docs/roadmap.md) for the detailed status and
+sequence.
 
 ## Getting started
 

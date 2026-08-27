@@ -49,12 +49,14 @@ status is:
 | 2 — Assessment | Complete | Six seeded unique pairs, separate observed/recorded selections, hierarchy derivation, accessible UI, and tests are present. |
 | 3 — Baseline/learning | Complete | Render-frequency-independent response generation, baseline metrics, experienced-consequence learning, satiation/recovery, UI, and tests are present. |
 | 4 — CRF | Complete | `deliverStimulus` classifies contingency/timing/schedule fidelity independently via `src/sim/crf.ts`; one-outstanding-criterion cycles, due-window abandonment (one `criterion-missed`/`cycle-abandoned` pair per timeout), the acquisition gate, corrective-coaching detection, derived CRF metrics, and the CRF portion of `TrainingScreen` (delivery target, keyboard shortcut, status announcements) are present and tested. |
-| 5 — VR-3 | Not started | The phase/schedule shape exists, but requirement generation, cycle semantics, completion gates, UI, and tests remain. |
+| 5 — VR-3 | Complete | Seeded, indexed VR ratio-requirement sequence (`vrRequirementAt`, pure `(seed, index, config)`, reuses `crf.ts`'s schedule-agnostic cycle machinery); live `deriveVrScheduleState` derives `currentRequirement`/`responsesSinceReinforcement`/`generatedRequirements` from the log with no incrementally patched snapshot state; `vrCyclesCompleted` requires both an on-schedule delivery's opening `criterion-met.schedule === 'VR'` and that it falls inside `vrRoundWindow` (schedule alone is ambiguous once extinction's withheld criteria reuse `schedule: 'VR'`; window alone is ambiguous at a same-instant round boundary); the `vr-cycles-not-met` round-order gate, coaching-due detection, and the VR portion of `TrainingScreen` are present and tested. |
 | 6 — Extinction/evidence | Complete (behavior model + detector); UI remains | Event-derived reinforcer-evidence and burst-detection rules are tested, including asymmetric sample-count floors and a calibrated 90s detection window; `learning.ts` has a real seeded extinction-transition burst term (`extinctionBurstPrimed`/`extinctionBurstMagnitudeScale`, seeded once per creature) with documented known burst/no-burst/indeterminate seeds (`extinction-transition.test.ts`). Live outcomes are now a healthy mix of all three verdicts rather than dominated by any one — see the "Extinction-transition state" risk checkpoint below for measured rates. The extinction-round UI/screen wiring is separate, Milestone 7/8 work. |
 | 7 — Debrief/charts | Partial | Shared chart-data projectors and accessible visx chart views are tested and wired into Advanced-mode `TrainingScreen` (live cumulative-record/response-rate charts plus an accessible event table, both passing `elapsedSimMs` explicitly to avoid understating an idle open round); the mode-neutral session summary and debrief screen remain. |
 | 8 — Release hardening | Not started | Playwright currently covers shell smoke, controls, keyboard operation, and an automated axe pass, not the complete learner journey. |
 
-The next critical-path increment is Milestone 5.
+The next critical-path increment is the Milestone 7 shared debrief/session
+summary screen (the extinction round's own UI/timing and Milestone 8 release
+hardening both depend on it).
 
 ## 3. Milestones
 
@@ -339,19 +341,25 @@ A milestone is complete only when:
 
 ## 7. Recommended Next Implementation Increment
 
-Implement Milestone 5 as the next vertical slice, extending the same
-`TrainingScreen`, event projectors, coaching language, and cycle machinery
-Milestone 4 built rather than creating parallel VR state:
+Milestone 5 (VR-3 guided maintenance) is complete: `src/sim/vr.ts` provides
+the seeded requirement sequence, live schedule-state derivation, the
+`vr-cycles-not-met` round-order gate, and coaching-due detection, reusing
+Milestone 4's schedule-agnostic cycle machinery unchanged; `TrainingScreen`
+has the matching VR UI; the full path is covered by `vr.test.ts`,
+`session.test.ts`, and `TrainingScreen.test.tsx`.
 
-1. generate deterministic shuffled `[2, 3, 4]` requirement blocks (mean of
-   three) and response counting per cycle,
-2. implement eligibility cues and cycle reset semantics,
-3. handle premature/late delivery, overruns, missed criteria, abandoned
-   cycles, and incomplete end-of-round cycles the same way Milestone 4 does,
-4. end the round only after six completed on-schedule cycles, and
-5. verify bounded seeded VR sequences, cycle semantics, incomplete-cycle
-   exclusion, and that schedule selection alone never changes creature
-   behavior, plus an assessment-to-VR integration test.
+Implement Milestone 7's shared, mode-neutral debrief/session-summary screen
+next — Milestone 6's extinction-round UI/timing and Milestone 8's release
+hardening both build on it:
 
-This is the last piece of required-path interaction work before the shared
-debrief (Milestone 7) and release hardening (Milestone 8).
+1. derive the session summary purely from the event log (reusing the
+   Milestone 7 chart-data projectors already wired into Advanced-mode
+   `TrainingScreen`), with no parallel mutable summary state,
+2. present Simple/Advanced-consistent conclusions, distinguishing preferred
+   stimuli/candidate reinforcers from evidenced reinforcers per the
+   event-derived evidence rule,
+3. surface the extinction-transition outcome (`burst` /
+   `no-burst-in-this-run` / `indeterminate`) using the debrief language
+   `data-model.md` §5 already specifies, and
+4. verify Simple/Advanced conclusion parity and accessible table/text
+   alternatives for every chart shown.

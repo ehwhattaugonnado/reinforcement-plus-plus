@@ -6,6 +6,8 @@ import {
   buildCumulativeRecordChartData,
   buildResponseRateChartData,
   createSession,
+  crfAcquisitionMet,
+  deriveOutstandingCycle,
   DEFAULT_SIM_CONFIG,
   type SessionState,
   type SimSession,
@@ -36,6 +38,47 @@ function crfSession(seed: string): SimSession {
     s.tick(50)
   s.startRound('crf')
   return s
+}
+
+/** Reaches VR through the real, default acquisition gate -- the production UI never overrides config (AGENTS.md). */
+function vrSession(seed: string): SimSession {
+  const s = crfSession(seed)
+  let guard = 0
+  while (
+    !crfAcquisitionMet(
+      s.getSnapshot().events,
+      s.getSnapshot().elapsedSimMs,
+      DEFAULT_SIM_CONFIG,
+    ) &&
+    guard < 30
+  ) {
+    tickUntilNextResponse(s, 50)
+    const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
+    s.deliverStimulus(stimulusId)
+    guard++
+  }
+  s.startRound('vr')
+  return s
+}
+
+/** Ticks until a criterion opens (schedule-agnostic), or `guard` steps pass. */
+function waitForOutstandingCycle(session: SimSession, guard = 5000): void {
+  let steps = 0
+  while (
+    deriveOutstandingCycle(session.getSnapshot().events, DEFAULT_SIM_CONFIG) ===
+      null &&
+    steps < guard
+  ) {
+    session.tick(50)
+    steps++
+  }
+}
+
+/** Completes one VR cycle: waits for the ratio to be met, then delivers. */
+function completeOneVrCycle(session: SimSession): void {
+  waitForOutstandingCycle(session)
+  const stimulusId = session.getSnapshot().creature.stimuli[0]!.stimulusId
+  session.deliverStimulus(stimulusId)
 }
 
 function tickUntilNextResponse(
@@ -404,6 +447,102 @@ describe('TrainingScreen', () => {
     it('has no automatically detectable accessibility violations in the CRF round', async () => {
       const session = crfSession('training-crf-a11y')
       tickUntilNextResponse(session, 50)
+      const { container } = render(
+        <TrainingScreen state={session.getSnapshot()} session={session} />,
+      )
+      await expectNoAxeViolations(container)
+    })
+  })
+
+  describe('VR-3 maintenance (Milestone 5)', () => {
+    it('reuses the delivery target and keyboard shortcut for VR', () => {
+      const session = vrSession('training-vr-1')
+      render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+
+      const deliverButton = screen.getByRole('button', { name: /deliver/i })
+      expect(deliverButton).toHaveClass('delivery-target')
+      expect(
+        screen.getByText(
+          (_, element) =>
+            element?.className === 'crf-shortcut-hint' &&
+            /press d to deliver/i.test(element.textContent ?? ''),
+        ),
+      ).toBeInTheDocument()
+    })
+
+    it('clicking after the ratio is met calls deliverStimulus and the status announces on-schedule', async () => {
+      const user = userEvent.setup()
+      const session = vrSession('training-vr-2')
+      waitForOutstandingCycle(session)
+      const { rerender } = render(
+        <TrainingScreen state={session.getSnapshot()} session={session} />,
+      )
+
+      await user.click(screen.getByRole('button', { name: /deliver/i }))
+      rerender(
+        <TrainingScreen state={session.getSnapshot()} session={session} />,
+      )
+
+      const last = session.getSnapshot().events.at(-1)
+      expect(last?.type).toBe('stimulus-delivered')
+      expect(
+        screen.getByText(/on schedule/i, { exact: false }),
+      ).toBeInTheDocument()
+    })
+
+    it('the documented "D" keyboard shortcut delivers in VR too', () => {
+      const session = vrSession('training-vr-3')
+      waitForOutstandingCycle(session)
+      render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+
+      const before = session.getSnapshot().events.length
+      fireEvent.keyDown(window, { key: 'd' })
+      expect(session.getSnapshot().events.length).toBe(before + 1)
+      expect(session.getSnapshot().events.at(-1)?.type).toBe(
+        'stimulus-delivered',
+      )
+    })
+
+    it('shows completed-cycle progress toward vrCyclesToComplete', () => {
+      const session = vrSession('training-vr-4')
+      completeOneVrCycle(session)
+      render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+      expect(
+        screen.getByText(
+          new RegExp(`1 of ${DEFAULT_SIM_CONFIG.vrCyclesToComplete}`, 'i'),
+        ),
+      ).toBeInTheDocument()
+    })
+
+    it('offers to advance to extinction only once vrCyclesToComplete on-schedule cycles are done', () => {
+      const session = vrSession('training-vr-5')
+      render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+      expect(
+        screen.queryByRole('button', { name: /advance to.*extinction/i }),
+      ).not.toBeInTheDocument()
+
+      for (let i = 0; i < DEFAULT_SIM_CONFIG.vrCyclesToComplete; i++) {
+        completeOneVrCycle(session)
+      }
+      render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+      expect(
+        screen.getByRole('button', { name: /advance to.*extinction/i }),
+      ).toBeInTheDocument()
+    })
+
+    it('surfaces the corrective-coaching message once vrCoachingPauseMs elapses without meeting vrCyclesToComplete', () => {
+      const session = vrSession('training-vr-6')
+      for (let i = 0; i < DEFAULT_SIM_CONFIG.vrCoachingPauseMs / 50 + 20; i++)
+        session.tick(50)
+      render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+      expect(
+        screen.getByText(/coaching/i, { exact: false }),
+      ).toBeInTheDocument()
+    })
+
+    it('has no automatically detectable accessibility violations in the VR round', async () => {
+      const session = vrSession('training-vr-a11y')
+      waitForOutstandingCycle(session)
       const { container } = render(
         <TrainingScreen state={session.getSnapshot()} session={session} />,
       )

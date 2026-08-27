@@ -39,6 +39,14 @@ export {
   type OutstandingCycle,
 } from './crf'
 export {
+  deriveVrScheduleState,
+  vrCoachingDue,
+  vrCyclesCompleted,
+  vrRequirementAt,
+  vrRoundWindow,
+  type VrScheduleState,
+} from './vr'
+export {
   buildCumulativeRecordChartData,
   buildResponseRateChartData,
   cumulativeRecordAnnotationsTable,

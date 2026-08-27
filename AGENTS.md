@@ -2,7 +2,7 @@
 
 ## Project
 
-Reinforcement++ is a browser-based pet-training simulation that teaches preference assessment and positive reinforcement. V1 is a 10–20 minute, low-stakes educational experience, not clinical decision support. The repository contains the approved design documentation and an in-progress Vite/React/TypeScript implementation. Milestones 0–4 are complete and Milestone 6's behavior-model/detector logic is complete; VR-3 interaction (Milestone 5), the extinction round's UI/timing, the shared debrief screen, and release hardening remain. Use `docs/roadmap.md` as the detailed status source.
+Reinforcement++ is a browser-based pet-training simulation that teaches preference assessment and positive reinforcement. V1 is a 10–20 minute, low-stakes educational experience, not clinical decision support. The repository contains the approved design documentation and an in-progress Vite/React/TypeScript implementation. Milestones 0–5 are complete and Milestone 6's behavior-model/detector logic is complete; the extinction round's UI/timing, the shared debrief screen, and release hardening remain. Use `docs/roadmap.md` as the detailed status source.
 
 ## Read Before Changing Code
 

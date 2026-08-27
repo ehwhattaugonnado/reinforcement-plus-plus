@@ -9,6 +9,8 @@ import {
   deriveCrfMetrics,
   deriveOutstandingCycle,
   isBaselineComplete,
+  vrCoachingDue,
+  vrCyclesCompleted,
   type SessionState,
   type SimSession,
   type StimulusId,
@@ -88,7 +90,7 @@ export function TrainingScreen({
   )
 
   const deliver = useCallback(() => {
-    if (state.phase !== 'crf') return
+    if (state.phase !== 'crf' && state.phase !== 'vr') return
     void session.deliverStimulus(selectedStimulusId)
   }, [session, state.phase, selectedStimulusId])
 
@@ -97,7 +99,7 @@ export function TrainingScreen({
   // response. Deliberately not Space/Enter (those already activate the
   // focused button) and not a browser-reserved chord (no Ctrl/Cmd/Alt).
   useEffect(() => {
-    if (state.phase !== 'crf') return
+    if (state.phase !== 'crf' && state.phase !== 'vr') return
     const onKeyDown = (event: KeyboardEvent) => {
       if (
         event.key.toLowerCase() === 'd' &&
@@ -143,6 +145,57 @@ export function TrainingScreen({
     }
     if (outstandingCycle !== null) {
       return `Reinforcement is due -- ${state.creature.name} just met the criterion. Deliver now.`
+    }
+    return `Waiting for ${state.creature.name} to respond.`
+  })()
+
+  // --- VR-3 maintenance (Milestone 5) ---
+
+  const vrCyclesCompletedCount = useMemo(
+    () => vrCyclesCompleted(state.events),
+    [state.events],
+  )
+  const vrCoachingDueFlag = useMemo(
+    () => vrCoachingDue(state.events, state.elapsedSimMs, DEFAULT_SIM_CONFIG),
+    [state.events, state.elapsedSimMs],
+  )
+  const vrCyclesRemaining =
+    DEFAULT_SIM_CONFIG.vrCyclesToComplete - vrCyclesCompletedCount
+
+  const vrStatusText = (() => {
+    if (vrCoachingDueFlag) {
+      return (
+        `Coaching: the ${DEFAULT_SIM_CONFIG.vrCyclesToComplete} on-schedule cycles have not been reached yet. ` +
+        `Watch for the "reinforcement due" cue and deliver right after ` +
+        `${state.creature.name} meets it.`
+      )
+    }
+    if (lastDelivery !== undefined) {
+      if (lastDelivery.contingency === 'noncontingent') {
+        return 'Delivered with no response to credit it to -- noncontingent.'
+      }
+      const timingText =
+        lastDelivery.timing === 'prompt'
+          ? 'promptly'
+          : 'later than the prompt window'
+      const fidelityText =
+        lastDelivery.scheduleFidelity === 'on-schedule'
+          ? 'on schedule'
+          : lastDelivery.scheduleFidelity === 'overrun'
+            ? 'after extra responses piled up (a schedule overrun)'
+            : 'before the schedule criterion was met (premature)'
+      return `Delivered ${timingText}, ${fidelityText}.`
+    }
+    if (outstandingCycle !== null) {
+      return `Reinforcement is due -- ${state.creature.name} just met the varying-ratio criterion. Deliver now.`
+    }
+    const schedulePlan = state.schedulePlan
+    if (schedulePlan?.type === 'VR') {
+      return (
+        `${schedulePlan.responsesSinceReinforcement} of ` +
+        `${schedulePlan.currentRequirement} responses toward the next ` +
+        `reinforcement.`
+      )
     }
     return `Waiting for ${state.creature.name} to respond.`
   })()
@@ -259,6 +312,61 @@ export function TrainingScreen({
           {acquisitionMet && (
             <button type="button" onClick={() => void session.startRound('vr')}>
               Advance to VR-3 maintenance
+            </button>
+          )}
+        </section>
+      )}
+
+      {state.phase === 'vr' && (
+        <section aria-labelledby="vr-heading" className="vr-round">
+          <h3 id="vr-heading">VR-3 maintenance</h3>
+          <p>
+            Reinforcement is now due on a varying schedule -- watch for the
+            "reinforcement due" cue, then deliver right after{' '}
+            {state.creature.name} meets it.
+          </p>
+
+          <fieldset>
+            <legend>What to deliver</legend>
+            {stimuli.map((s) => (
+              <label key={s.stimulusId}>
+                <input
+                  type="radio"
+                  name="vr-stimulus"
+                  checked={selectedStimulusId === s.stimulusId}
+                  onChange={() =>
+                    setSelectedStimulusId(s.stimulusId as StimulusId)
+                  }
+                />
+                {STIMULUS_LABELS[s.stimulusId as StimulusId]}
+              </label>
+            ))}
+          </fieldset>
+
+          <p role="status" className="vr-status">
+            {vrStatusText}
+          </p>
+
+          <button type="button" className="delivery-target" onClick={deliver}>
+            Deliver {STIMULUS_LABELS[selectedStimulusId]} to{' '}
+            {state.creature.name}
+          </button>
+          <p className="crf-shortcut-hint">
+            Keyboard shortcut: press <kbd>D</kbd> to deliver.
+          </p>
+
+          <p className="vr-progress">
+            Completed on-schedule cycles: {vrCyclesCompletedCount} of{' '}
+            {DEFAULT_SIM_CONFIG.vrCyclesToComplete} needed
+            {vrCyclesRemaining > 0 ? ` (${vrCyclesRemaining} to go)` : ''}.
+          </p>
+
+          {vrCyclesCompletedCount >= DEFAULT_SIM_CONFIG.vrCyclesToComplete && (
+            <button
+              type="button"
+              onClick={() => void session.startRound('extinction')}
+            >
+              Advance to the optional extinction demonstration
             </button>
           )}
         </section>

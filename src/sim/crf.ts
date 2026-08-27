@@ -105,8 +105,14 @@ function lastConsumptionBoundaryMs(events: readonly SimEvent[]): number {
   return boundary
 }
 
-/** Responses at or before `atMs` not yet consumed by a delivery or abandonment. */
-function unconsumedResponses(
+/**
+ * Responses at or before `atMs` not yet consumed by a delivery, abandonment,
+ * or entry into a scheduled round. Exported for reuse by `vr.ts`, which
+ * derives its live response-count-toward-the-current-ratio from exactly
+ * this set, so the same responses a delivery right now would classify as
+ * `response-contingent` are the ones counted toward the VR requirement.
+ */
+export function unconsumedResponses(
   events: readonly SimEvent[],
   atMs: number,
 ): ResponseEmitted[] {

@@ -6,6 +6,7 @@ import {
   deriveLearnedStrength,
   deriveStimuliValues,
 } from './learning'
+import { deriveVrScheduleState, type VrScheduleState } from './vr'
 import type { AssessmentTrial, SchedulePlan, SessionState } from './types'
 
 /**
@@ -63,7 +64,12 @@ function applyToFields(
       return {
         ...state,
         phase: event.phase,
-        schedulePlan: planFor(event.phase, config),
+        schedulePlan: planFor(
+          event.phase,
+          config,
+          [...state.events, event],
+          state.seed,
+        ),
       }
 
     case 'pair-presented':
@@ -136,11 +142,20 @@ function applyToFields(
   }
 }
 
+const VR_SCHEDULE_EVENT_TYPES: ReadonlySet<SimEvent['type']> = new Set([
+  'response-emitted',
+  'criterion-met',
+  'cycle-abandoned',
+  'stimulus-delivered',
+])
+
 function applyBehavioralEvent(
   state: SessionState,
   event: SimEvent,
   config: SimConfig,
 ): SessionState {
+  let next = state
+
   if (
     event.type === 'stimulus-delivered' ||
     event.type === 'response-emitted'
@@ -170,8 +185,8 @@ function applyBehavioralEvent(
       creatureWithUpdates,
       state.phase,
     )
-    return {
-      ...state,
+    next = {
+      ...next,
       creature: {
         ...creatureWithUpdates,
         targetBehavior: {
@@ -181,13 +196,23 @@ function applyBehavioralEvent(
       },
     }
   }
-  if (event.type === 'criterion-met' && state.schedulePlan?.type === 'VR') {
-    return {
-      ...state,
-      schedulePlan: { ...state.schedulePlan, responsesSinceReinforcement: 0 },
+
+  // VR's live schedule state (which ratio is current, how many responses
+  // count toward it, the full history presented so far) is fully re-derived
+  // from the log on every event that could change it, rather than patched
+  // incrementally -- the same replay-safety rationale as above, and it is
+  // what lets an abandoned cycle "start a new one" (core-loop.md Round 2)
+  // fall out of `deriveVrScheduleState` for free (see vr.ts).
+  if (state.phase === 'vr' && VR_SCHEDULE_EVENT_TYPES.has(event.type)) {
+    next = {
+      ...next,
+      schedulePlan: toVrSchedulePlan(
+        deriveVrScheduleState([...state.events, event], state.seed, config),
+      ),
     }
   }
-  return state
+
+  return next
 }
 
 function withCurrentTrial(
@@ -203,21 +228,27 @@ function withCurrentTrial(
   return { ...state, assessment: { ...state.assessment, trials: nextTrials } }
 }
 
-function planFor(phase: Phase, config: SimConfig): SchedulePlan | null {
+function toVrSchedulePlan(vrState: VrScheduleState): SchedulePlan {
+  return {
+    type: 'VR',
+    meanRatio: 3,
+    currentRequirement: vrState.currentRequirement,
+    responsesSinceReinforcement: vrState.responsesSinceReinforcement,
+    generatedRequirements: vrState.generatedRequirements,
+  }
+}
+
+function planFor(
+  phase: Phase,
+  config: SimConfig,
+  eventsSoFar: readonly SimEvent[],
+  seed: string,
+): SchedulePlan | null {
   switch (phase) {
     case 'crf':
       return { type: 'CRF', responsesRequired: 1 }
     case 'vr':
-      return {
-        type: 'VR',
-        meanRatio: 3,
-        // TODO(Milestone 5): seeded shuffled requirement blocks. The first
-        // requirement must come from the log, not from a fresh draw here,
-        // because this projector is pure.
-        currentRequirement: config.vrMeanRatio,
-        responsesSinceReinforcement: 0,
-        generatedRequirements: [],
-      }
+      return toVrSchedulePlan(deriveVrScheduleState(eventsSoFar, seed, config))
     default:
       return null
   }

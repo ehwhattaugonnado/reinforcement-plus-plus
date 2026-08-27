@@ -11,6 +11,7 @@ import { createInitialState } from './initial-state'
 import { RESPONDING_PHASES, meanInterarrivalMs } from './learning'
 import { applyEvent } from './project'
 import { createRng, type Rng } from './rng'
+import { vrCyclesCompleted } from './vr'
 import { isStimulusId } from './stimuli'
 import {
   ok,
@@ -168,18 +169,30 @@ export function createSession(
             generated.push(event)
 
             // CRF: every response meets the schedule criterion (core-loop.md
-            // Round 1), but at most one criterion is outstanding at a time.
-            // TODO(Milestone 5): VR ratio-requirement criteria.
-            // TODO(Milestone 6): extinction round's withheld-criterion path.
+            // Round 1). VR: a criterion opens once responses since the last
+            // resolved cycle reach the current seeded ratio requirement
+            // (core-loop.md Round 2; vr.ts's `deriveVrScheduleState`, which
+            // `state.schedulePlan` was just refreshed to reflect above via
+            // `applyEvent`). Extinction intentionally opens none: withheld
+            // reinforcement is the whole point of the round, and any
+            // criterion-met there is constructed only by evidence.ts's
+            // detector inputs, never emitted live. At most one criterion is
+            // ever outstanding at a time either way.
+            const opensCrfCriterion = state.phase === 'crf'
+            const opensVrCriterion =
+              state.phase === 'vr' &&
+              state.schedulePlan?.type === 'VR' &&
+              state.schedulePlan.responsesSinceReinforcement >=
+                state.schedulePlan.currentRequirement
             if (
-              state.phase === 'crf' &&
+              (opensCrfCriterion || opensVrCriterion) &&
               deriveOutstandingCycle(state.events, config) === null
             ) {
               const criterionMetEvent: SimEvent = {
                 type: 'criterion-met',
                 at: event.at,
                 responseId: event.responseId,
-                schedule: 'CRF',
+                schedule: opensCrfCriterion ? 'CRF' : 'VR',
               }
               state = applyEvent(state, criterionMetEvent, config)
               generated.push(criterionMetEvent)
@@ -261,8 +274,15 @@ export function createSession(
             'increase over baseline) is not yet met',
         )
       }
-      // TODO(Milestone 5): reject vr -> extinction until `vrCyclesToComplete`
-      // on-schedule VR cycles have completed.
+      if (
+        round === 'extinction' &&
+        vrCyclesCompleted(state.events) < config.vrCyclesToComplete
+      ) {
+        return reject(
+          'vr-cycles-not-met',
+          `${config.vrCyclesToComplete} completed on-schedule VR cycles are required`,
+        )
+      }
 
       // A round can end with a criterion outstanding (reinforcement due but
       // not yet delivered or timed out). Abandon it here, before the phase
