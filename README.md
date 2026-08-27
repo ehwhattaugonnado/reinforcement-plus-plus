@@ -1,16 +1,37 @@
 # Reinforcement++
 
 Reinforcement++ is a browser-based pet-training simulation for learning
-paired-stimulus preference assessment and positive reinforcement. The v1
-experience is designed to be cute, constructive, punishment-free, and
-educational; it is not clinical guidance or decision support.
+paired-stimulus preference assessment and positive reinforcement. It's a
+10-20 minute, low-stakes, cute, constructive, punishment-free interactive
+experience — you assess what a virtual creature likes, then practice
+delivering it as reinforcement on different schedules and see the effects
+play out.
 
-## Project status
+**This is an educational toy, not clinical guidance or decision support.**
+It is not a substitute for training, supervision, or credentialing in
+behavior analysis, and its content has not yet had a qualified
+behavior-analytic subject-matter review (see [Status](#status) below).
 
-V1 is under active development on the `feat/v1-foundation` branch. The
-application currently includes:
+## Try it
 
-- a Vite, React, and TypeScript shell;
+▶ **[Live demo](https://ehwhattaugonnado.github.io/reinforcement-plus-plus/)**
+
+No install, no account, no data collection — everything runs client-side and
+nothing is saved between sessions.
+
+## AI development disclaimer
+
+This project's code, and most of its design documentation, were written
+collaboratively with AI coding assistants (Claude Code), under human
+direction and review. If you're evaluating this repository's engineering
+practices, its commit history and `docs/adr/` reflect that process
+honestly. Treat it as a personal/hobby project accordingly — it has not had
+independent professional code review or a security audit.
+
+## Status
+
+V1 is under active development. The application currently includes:
+
 - a deterministic, event-sourced simulation core with replay, controlled
   time, pause, and 0.5x/1x speed;
 - the complete six-trial paired-stimulus assessment;
@@ -29,12 +50,12 @@ application currently includes:
 - Vitest, React Testing Library, Playwright smoke, and automated accessibility
   coverage.
 
-The complete learner path is not ready yet. The extinction round's own
+The complete learner path is not finished yet. The extinction round's own
 UI/timing, the shared debrief screen, and release hardening remain. See the
 [implementation roadmap](docs/roadmap.md) for the detailed status and
 sequence.
 
-## Getting started
+## Running it locally
 
 Requirements:
 
@@ -47,7 +68,7 @@ npm run dev
 ```
 
 Vite prints the local development URL. No backend or persistence setup is
-needed; v1 session state lives in memory.
+needed; session state lives in memory only.
 
 ## Commands
 
@@ -101,7 +122,16 @@ must not be committed.
 
 ## Release boundary
 
-Passing automated checks is not sufficient for public release. V1 also
-requires qualified behavior-analytic subject-matter review, representative
-learner usability sessions, learning-objective checks, and manual keyboard,
-screen-reader, touch, reduced-motion, and color/contrast review.
+Passing automated checks is not sufficient for public release as an
+educational tool. V1 also requires qualified behavior-analytic
+subject-matter review, representative learner usability sessions,
+learning-objective checks, and manual keyboard, screen-reader, touch,
+reduced-motion, and color/contrast review. None of that review has happened
+yet — the live demo above is a development preview, not a finished,
+reviewed product.
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE) — free to use, modify, and share for
+any noncommercial purpose (personal, educational, research). Commercial use
+requires separate permission from the author.
