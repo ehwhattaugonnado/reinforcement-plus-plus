@@ -42,8 +42,8 @@ export function DebriefScreen({
   return (
     <section aria-labelledby="debrief-heading">
       <h2 id="debrief-heading">Session debrief</h2>
-      <p>{reinforcerConclusion}</p>
-      <p>{burstConclusion}</p>
+      <p className="debrief-conclusion">{reinforcerConclusion}</p>
+      <p className="debrief-burst-conclusion">{burstConclusion}</p>
       <p>
         Reinforcement changed a future response pattern; it did not “reinforce
         the creature.” Preference and reinforcement are related questions, but

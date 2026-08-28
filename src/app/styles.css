@@ -1,151 +1,61 @@
+/*
+ * Visual world: The Trial Data Sheet. The whole app reads as the RBT's own
+ * ruled clipboard sheet, not a dashboard around one — every response a
+ * tally, every phase a stamped condition header. See index.html's
+ * FORM/OWN-WORLD contract comment for the full direction record.
+ */
+
 :root {
-  --bg: #fdfcfa;
-  --fg: #221f1c;
-  --accent: #3b5bdb;
-  color-scheme: light dark;
-}
+  /* -- material palette --------------------------------------------- */
+  --paper: #efe9dd; /* clipboard sheet ground */
+  --paper-deep: #e4dcc9; /* ruled boxes, panels set into the sheet */
+  --paper-edge: #d8ceb5; /* rule lines, hairline borders */
+  --ink: #2f2b26; /* graphite body text */
+  --ink-soft: #5c5346; /* secondary text, tinted from ink, never gray */
+  --pencil: #948a72; /* provisional / not-yet-recorded marks */
+  --flag: #e8b93a; /* highlighter yellow — attention, "due now" */
+  --flag-ink: #4a3a0a; /* text set on top of a flag highlight */
+  --ballpoint: #2f4f8f; /* primary action, selection, focus */
+  --ballpoint-deep: #22396b; /* pressed / hover-deepened ballpoint */
+  --stamp: #a4372a; /* rubber accession stamp — earned status only */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1b1a19;
-    --fg: #f2efeb;
-    --accent: #91a7ff;
-  }
-}
+  --shadow-color: 38 30 14;
+  color-scheme: light;
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: system-ui, sans-serif;
-  line-height: 1.5;
-}
-
-.app-shell {
-  max-width: 60rem;
-  margin: 0 auto;
-  padding: 1.5rem;
-}
-
-.session-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  align-items: center;
-}
-
-.chart svg {
-  display: block;
-  max-width: 100%;
-}
-
-.chart details {
-  max-width: 100%;
-  overflow-x: auto;
-}
-
-.table-scroll {
-  max-width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-table {
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 0.35rem 0.55rem;
-  text-align: left;
-}
-
-.stimulus-options {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.approach-scene {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-  padding: 0.75rem;
-  border: 1px solid currentColor;
-  border-radius: 0.5rem;
-}
-
-.approach-creature {
-  font-weight: 700;
-}
-
-.approach-item {
-  padding: 0.35rem 0.55rem;
-  border: 2px solid transparent;
-  border-radius: 0.35rem;
-}
-
-.approach-item.selected {
-  border-color: var(--accent);
-  font-weight: 700;
-}
-
-.no-approach {
-  font-style: italic;
-}
-
-@media (max-width: 36rem) {
-  .app-shell {
-    padding: 1rem;
-  }
-
-  .session-controls {
-    align-items: stretch;
-  }
-
-  .delivery-target {
-    width: 100%;
-    min-width: 0;
-  }
-}
-
-/* Delivery and other primary controls need a large target on touch. */
-button {
-  min-height: 2.75rem;
-  min-width: 2.75rem;
-  font: inherit;
-  padding: 0.5rem 1rem;
+  --font-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-data:
+    'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
 
 /*
- * The CRF/VR/extinction stimulus-delivery target: the single most
- * frequently pressed control in training, so it gets a target well above
- * the plain button minimum (WCAG 2.2 AA "Target Size (Minimum)").
+ * Dark mode is not the SaaS default of slate-and-neon: the use scene is the
+ * same clipboard sheet read at a desk lamp after dark, so it stays a paper
+ * world — dark kraft board with warm parchment ink — rather than switching
+ * material families.
  */
-.delivery-target {
-  min-height: 4.5rem;
-  min-width: 12rem;
-  font-size: 1.25rem;
-  font-weight: 600;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #211b12;
+    --paper-deep: #2b2318;
+    --paper-edge: #4a3d29;
+    --ink: #ece3d0;
+    --ink-soft: #b9ac8e;
+    --pencil: #8a7d63;
+    --flag: #e8b93a;
+    --flag-ink: #2a2005;
+    --ballpoint: #86a4e8;
+    --ballpoint-deep: #b3c6f2;
+    --stamp: #d9705d;
+    --shadow-color: 0 0 0;
+    color-scheme: dark;
+  }
 }
 
-:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
+* {
+  box-sizing: border-box;
 }
 
+.sr-only,
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -156,6 +66,625 @@ button {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+html {
+  caret-color: var(--ballpoint);
+}
+
+body {
+  margin: 0;
+  background: var(--paper-edge);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.55;
+  text-rendering: optimizeLegibility;
+}
+
+/* Text selection reads as the literal highlighter, not a browser default. */
+::selection {
+  background: var(--flag);
+  color: var(--flag-ink);
+}
+
+/* Firefox */
+* {
+  scrollbar-color: var(--pencil) var(--paper-deep);
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--paper-deep);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--pencil);
+  border-radius: 999px;
+  border: 3px solid var(--paper-deep);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+h2 {
+  font-size: 1.375rem;
+  margin: 2rem 0 0.75rem;
+}
+
+h3 {
+  font-size: 1.125rem;
+  margin: 1.75rem 0 0.6rem;
+}
+
+h4 {
+  font-size: 1rem;
+  margin: 1.25rem 0 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+p {
+  max-width: 68ch;
+}
+
+/*
+ * Condition headers for each training round render as a stamped field
+ * label, the way a data sheet marks which condition a block of trials
+ * belongs to (BASELINE / CRF / VR-3 / EXTINCTION).
+ */
+.crf-round > h3,
+.vr-round > h3,
+.extinction-round > h3 {
+  display: inline-block;
+  padding: 0.3rem 0.75rem;
+  border: 2px solid var(--ballpoint);
+  border-radius: 0.3rem;
+  transform: rotate(-1.25deg);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 1rem;
+  margin-top: 1.5rem;
+}
+
+a {
+  color: var(--ballpoint);
+  text-underline-offset: 0.15em;
+  text-decoration-thickness: 0.08em;
+}
+
+a:hover {
+  color: var(--ballpoint-deep);
+}
+
+kbd {
+  font-family: var(--font-data);
+  font-size: 0.85em;
+  border: 1px solid var(--paper-edge);
+  border-bottom-width: 2px;
+  border-radius: 0.3rem;
+  padding: 0.1rem 0.4rem;
+  background: var(--paper);
+  box-shadow: 0 1px 0 rgb(var(--shadow-color) / 0.12);
+}
+
+input[type='radio'],
+input[type='checkbox'] {
+  accent-color: var(--ballpoint);
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ballpoint);
+  outline-offset: 2px;
+}
+
+/* -- the sheet ------------------------------------------------------- */
+
+.app-shell {
+  position: relative;
+  max-width: 46rem;
+  margin: 2.5rem auto;
+  padding: 2rem 2.25rem 2.75rem;
+  background: repeating-linear-gradient(
+    var(--paper) 0,
+    var(--paper) 1.7rem,
+    var(--paper-edge) 1.7rem,
+    var(--paper-edge) calc(1.7rem + 1px)
+  );
+  border: 1px solid var(--paper-edge);
+  border-radius: 0.3rem;
+  box-shadow:
+    0 1px 2px rgb(var(--shadow-color) / 0.12),
+    0 12px 28px -14px rgb(var(--shadow-color) / 0.35);
+}
+
+/* The clip holding the sheet to the board: two CSS shapes, no image. */
+.app-shell::before {
+  content: '';
+  position: absolute;
+  top: -0.85rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5.5rem;
+  height: 1.35rem;
+  background: var(--pencil);
+  border-radius: 0.3rem;
+  box-shadow: 0 3px 6px -2px rgb(var(--shadow-color) / 0.4);
+}
+
+.app-shell::after {
+  content: '';
+  position: absolute;
+  top: -0.35rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2.75rem;
+  height: 0.8rem;
+  background: var(--paper-deep);
+  border: 1px solid var(--paper-edge);
+  border-radius: 0 0 0.6rem 0.6rem;
+}
+
+.app-shell > header {
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.app-shell > header h1 {
+  font-size: 1.6rem;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.4rem;
+}
+
+.app-shell > header h1::after {
+  content: '';
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  margin-left: 0.4em;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--stamp);
+}
+
+.boundary-note {
+  font-family: var(--font-data);
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+  max-width: 62ch;
+  margin: 0;
+}
+
+/* -- session controls: the clipboard hardware strip ------------------ */
+
+.session-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem 1.5rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  margin: 1.25rem 0 0.5rem;
+  background: var(--paper-deep);
+  border: 1px solid var(--paper-edge);
+  border-radius: 0.4rem;
+}
+
+.session-controls fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.session-controls legend {
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  padding: 0;
+  float: left;
+  margin-right: 0.5rem;
+}
+
+.session-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-data);
+  font-size: 0.9rem;
+}
+
+.session-status {
+  font-family: var(--font-data);
+  font-weight: 500;
+  margin: 0;
+}
+
+.session-elapsed {
+  font-family: var(--font-data);
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+/* -- generic controls -------------------------------------------------- */
+
+button {
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.55rem 1.1rem;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1.5px solid var(--ink);
+  border-radius: 0.4rem;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease-out,
+    box-shadow 0.12s ease-out,
+    background-color 0.12s ease-out;
+}
+
+button:hover {
+  background: var(--paper-deep);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button[aria-disabled='true'] {
+  color: var(--pencil);
+  border-color: var(--paper-edge);
+  cursor: default;
+}
+
+button[aria-disabled='true']:hover {
+  background: var(--paper);
+}
+
+fieldset {
+  border: 1px solid var(--paper-edge);
+  border-radius: 0.4rem;
+  padding: 0.85rem 1rem 1rem;
+  margin: 1rem 0;
+}
+
+legend {
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+  padding: 0 0.4rem;
+}
+
+.stimulus-options {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.stimulus-options label {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: var(--font-data);
+  font-size: 0.9rem;
+}
+
+/*
+ * The CRF/VR/extinction stimulus-delivery target: the single most
+ * frequently pressed control in training, styled as the sheet's rubber
+ * accession stamp. Sizing above the plain button minimum is preserved
+ * (WCAG 2.2 AA "Target Size (Minimum)").
+ */
+.delivery-target {
+  display: block;
+  min-height: 4.5rem;
+  min-width: 14rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--paper);
+  background: var(--ballpoint);
+  border: 3px double var(--paper);
+  outline: 2px solid var(--ballpoint);
+  outline-offset: -2px;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 0 var(--ballpoint-deep);
+  margin: 1rem 0 0.35rem;
+}
+
+.delivery-target:hover {
+  background: var(--ballpoint-deep);
+}
+
+.delivery-target:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--ballpoint-deep);
+}
+
+.crf-shortcut-hint {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  margin-top: 0;
+}
+
+/* -- observed-trial / approach scene ---------------------------------- */
+
+.approach-scene {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.9rem 1rem;
+  margin: 0.75rem 0;
+  background: var(--paper-deep);
+  border: 1px dashed var(--pencil);
+  border-radius: 0.4rem;
+}
+
+.approach-creature {
+  font-family: var(--font-data);
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.approach-item {
+  padding: 0.4rem 0.65rem;
+  border: 1.5px solid var(--paper-edge);
+  border-radius: 0.3rem;
+  background: var(--paper);
+}
+
+.approach-item.selected {
+  border-color: var(--stamp);
+  border-style: solid;
+  border-width: 2px;
+  font-weight: 700;
+  color: var(--stamp);
+  background: color-mix(in srgb, var(--stamp) 10%, var(--paper));
+}
+
+.no-approach {
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+/* -- status lines, coaching, and progress notes ------------------------ */
+
+/*
+ * Status lines read as filled-in form fields: a ruled box with a dotted
+ * baseline under the text, the way a typed entry sits on a printed line.
+ * Deliberately not a colored side bar (the AI-tool tell); the "due now"
+ * hint distinguishes itself with a highlighter wash instead of an accent
+ * border.
+ */
+.assessment-progress,
+.assessment-hint,
+.crf-status,
+.vr-status,
+.creature-state {
+  font-family: var(--font-data);
+  padding: 0.6rem 0.85rem 0.7rem;
+  background: var(--paper-deep);
+  border: 1px solid var(--paper-edge);
+  border-bottom: 1px dotted var(--pencil);
+  border-radius: 0.3rem;
+}
+
+.assessment-hint {
+  background: color-mix(in srgb, var(--flag) 22%, var(--paper-deep));
+  border-color: color-mix(in srgb, var(--flag) 55%, var(--paper-edge));
+}
+
+.crf-progress,
+.vr-progress {
+  font-family: var(--font-data);
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.round-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.debrief-conclusion,
+.debrief-burst-conclusion {
+  position: relative;
+  padding: 0.75rem 3.25rem 0.75rem 1rem;
+  margin: 0.5rem 0;
+  background: var(--paper-deep);
+  border: 1px solid var(--paper-edge);
+  border-radius: 0.4rem;
+}
+
+/*
+ * A fixed-size accession seal, independent of how the paragraph wraps: two
+ * concentric rings drawn with a radial gradient, the way an ink-stamp seal
+ * survives being pressed onto text of any length.
+ */
+.debrief-conclusion::after,
+.debrief-burst-conclusion::after {
+  content: '';
+  position: absolute;
+  top: 0.6rem;
+  right: 0.85rem;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 50%;
+  transform: rotate(-9deg);
+  opacity: 0.55;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    transparent 0 54%,
+    var(--stamp) 54% 60%,
+    transparent 60% 76%,
+    var(--stamp) 76% 82%,
+    transparent 82%
+  );
+}
+
+/* -- tables: the ledger ------------------------------------------------ */
+
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+table {
+  border-collapse: collapse;
+  font-family: var(--font-data);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  width: 100%;
+}
+
+caption {
+  text-align: left;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+  padding-bottom: 0.4rem;
+}
+
+th,
+td {
+  padding: 0.4rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid var(--paper-edge);
+}
+
+thead th {
+  border-bottom: 2px solid var(--ink);
+  color: var(--ink-soft);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+tbody tr:hover {
+  background: var(--paper-deep);
+}
+
+.vr-trial-history td {
+  text-align: center;
+  font-weight: 700;
+}
+
+details summary {
+  cursor: pointer;
+  font-family: var(--font-data);
+  font-size: 0.9rem;
+  color: var(--ballpoint);
+  padding: 0.3rem 0;
+}
+
+details summary:hover {
+  color: var(--ballpoint-deep);
+}
+
+/* -- charts: taped onto the sheet, on graph paper ----------------------- */
+
+.chart {
+  margin: 1.25rem 0;
+  padding: 1rem 1rem 0.5rem;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 1.4rem,
+      rgb(var(--shadow-color) / 0.06) 1.4rem calc(1.4rem + 1px)
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 1.4rem,
+      rgb(var(--shadow-color) / 0.06) 1.4rem calc(1.4rem + 1px)
+    ),
+    var(--paper);
+  border: 1px solid var(--paper-edge);
+  border-radius: 0.4rem;
+  color: var(--ink);
+}
+
+.chart figcaption {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.chart svg {
+  display: block;
+  max-width: 100%;
+}
+
+.chart-text-summary {
+  font-family: var(--font-data);
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.chart details {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* -- responsive --------------------------------------------------------- */
+
+@media (max-width: 36rem) {
+  .app-shell {
+    margin: 1.25rem auto;
+    padding: 1.5rem 1.25rem 2rem;
+    border-radius: 0;
+  }
+
+  .session-controls {
+    align-items: stretch;
+  }
+
+  .session-controls fieldset {
+    flex-wrap: wrap;
+  }
+
+  .delivery-target {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .round-actions {
+    flex-direction: column;
+  }
+
+  .round-actions button {
+    width: 100%;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
