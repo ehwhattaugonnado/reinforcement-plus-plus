@@ -132,6 +132,7 @@ reviewed product.
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE) — free to use, modify, and share for
-any noncommercial purpose (personal, educational, research). Commercial use
-requires separate permission from the author.
+Copyright © 2026 b0rt.
+
+[GNU Affero General Public License v3.0](LICENSE) (SPDX:
+`AGPL-3.0-only`).
