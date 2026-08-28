@@ -8,3 +8,5 @@ docs/ref/
 *.local
 .DS_Store
 .claude/worktrees/
+.*/
+CLAUDE.md
