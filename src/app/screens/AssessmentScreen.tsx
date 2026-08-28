@@ -107,6 +107,30 @@ export function AssessmentScreen({
                     ]
                   }.`}
             </p>
+            <div className="approach-scene" aria-hidden="true">
+              <span className="approach-creature">{creature.name}</span>
+              <span
+                className={
+                  pendingTrial.creatureSelection === pendingTrial.leftId
+                    ? 'approach-item selected'
+                    : 'approach-item'
+                }
+              >
+                {STIMULUS_LABELS[pendingTrial.leftId as StimulusId]}
+              </span>
+              <span
+                className={
+                  pendingTrial.creatureSelection === pendingTrial.rightId
+                    ? 'approach-item selected'
+                    : 'approach-item'
+                }
+              >
+                {STIMULUS_LABELS[pendingTrial.rightId as StimulusId]}
+              </span>
+              {pendingTrial.creatureSelection === null && (
+                <span className="no-approach">No approach</span>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -154,31 +178,34 @@ export function AssessmentScreen({
             delivering one is shown to actually increase {creature.name}
             &rsquo;s behavior above baseline.
           </p>
-          <table>
-            <caption>
-              {creature.name}&rsquo;s preference hierarchy from this assessment
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Rank</th>
-                <th scope="col">Stimulus</th>
-                <th scope="col">Times selected</th>
-                <th scope="col">Times presented</th>
-                <th scope="col">Selection percentage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {summary.hierarchy.map((row) => (
-                <tr key={row.stimulusId}>
-                  <td>{row.rank}</td>
-                  <td>{STIMULUS_LABELS[row.stimulusId as StimulusId]}</td>
-                  <td>{row.timesSelected}</td>
-                  <td>{row.timesPresented}</td>
-                  <td>{Math.round(row.selectionPercentage * 100)}%</td>
+          <div className="table-scroll">
+            <table>
+              <caption>
+                {creature.name}&rsquo;s preference hierarchy from this
+                assessment
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Rank</th>
+                  <th scope="col">Stimulus</th>
+                  <th scope="col">Times selected</th>
+                  <th scope="col">Times presented</th>
+                  <th scope="col">Selection percentage</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {summary.hierarchy.map((row) => (
+                  <tr key={row.stimulusId}>
+                    <td>{row.rank}</td>
+                    <td>{STIMULUS_LABELS[row.stimulusId as StimulusId]}</td>
+                    <td>{row.timesSelected}</td>
+                    <td>{row.timesPresented}</td>
+                    <td>{Math.round(row.selectionPercentage * 100)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <p role="status">
             {summary.recordingAccuracy.accuracy === null

@@ -63,7 +63,13 @@ export function CumulativeRecordChart({
       <figcaption>{title}</figcaption>
 
       {/* Decorative: the text summary and table below carry the same facts. */}
-      <svg width={width} height={height} aria-hidden="true">
+      <svg
+        width="100%"
+        height="auto"
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="xMidYMid meet"
+        aria-hidden="true"
+      >
         <Group left={margin.left} top={margin.top}>
           <AxisLeft scale={yScale} label="Cumulative responses" numTicks={4} />
           <AxisBottom

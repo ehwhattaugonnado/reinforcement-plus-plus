@@ -5,7 +5,9 @@ See also: [product spec](../product-spec.md) · [core loop](../core-loop.md) · 
 ## Technology stack
 
 Use Vite, React, and TypeScript. V1 has no backend; all session state is held
-in memory. The deployment target remains deferred.
+in memory. GitHub Pages hosts the development preview; approval of that preview
+as the public-release target remains gated on the release criteria in the
+product specification.
 
 ## Simulation core and React shell
 
@@ -24,6 +26,7 @@ presentNextPair(): CommandResult
 recordObservedSelection(stimulusId: string | null): CommandResult
 startRound(round: 'baseline' | 'crf' | 'vr' | 'extinction'): CommandResult
 deliverStimulus(stimulusId: string): CommandResult
+finishSession(): CommandResult
 tick(realDtMs: number): CommandResult
 setPaused(paused: boolean): CommandResult
 setSpeed(speed: 0.5 | 1): CommandResult
@@ -39,35 +42,48 @@ result and rejection-reason shapes. `replay` resolves the `SimConfig` for a log
 under the rules in
 [ADR 0009: replay config resolution](../adr/0009-replay-config-resolution.md).
 
-Replay reconstructs state **as of the last recorded event**, so the replayed
+Replay reconstructs event-sourced state **as of the last recorded event**, so the replayed
 `elapsedSimMs` equals that event's `at`. A tick that generates no events is
 deliberately not recorded — there is nothing about it to reconstruct — which
 means a live snapshot taken mid-interval is ahead of its own log by design.
 Compare a live session against its replay at an event boundary, not after a
-bare `tick`.
+bare `tick`. The live controlled-clock cursor is ephemeral runtime state
+between event boundaries, not a second source for historical facts: events
+carry their authoritative simulated timestamps, and every metric, chart,
+table, debrief conclusion, and replay projection derives from those events.
+See ADR 0001 for this clarified boundary.
 
-Commands do not accept or expose mutable creature state. As of Milestone 4,
+Commands do not accept or expose mutable creature state. CRF
 `deliverStimulus` classifies each delivery against the current response and
 the single outstanding schedule criterion (`src/sim/crf.ts`), including the
 associated `responseId` when one exists; contingency, timing, and schedule
 fidelity are derived independently, and `session.ts`'s `tick` walks response
 generation and due-window abandonment together so a due window contributes at
 most one `criterion-missed`/`cycle-abandoned` pair. VR's own ratio-requirement
-criteria and `premature` deliveries reachable through live play remain
-Milestone 5 work; `crf.ts`'s classification function already supports
-`premature` as a pure function today (see `crf.test.ts`). The `config` option
+criteria were replaced by ADR 0010's session-wide running-average model. Live
+play now classifies `premature`, `overrun`, and `not-variable` deliveries and
+derives a trial-by-trial reinforcement history. The `config` option
 exists for tests and fixtures only; the React shell always constructs a
 session with the
 [configuration constants](./data-model.md#6-configuration-constants) defaults.
 
 The React shell (`src/app/`) uses `useSyncExternalStore` through a
 `useSimState()` bridge. Components render snapshots and send commands; no
-simulation rule lives in a hook or component.
+simulation rule lives in a hook or component. Production components must not
+import `DEFAULT_SIM_CONFIG` to re-run gates or thresholds. The current
+`TrainingScreen` and the current app-layer debrief projector still do so for
+progress, coaching, and evidence projections; that is known boundary cleanup,
+not the intended architecture. Configured core projectors or snapshot fields
+should supply those display facts while the shell continues to create sessions
+with defaults.
 
 Browser visibility changes automatically pause the controlled simulation
 clock. `tick` receives elapsed wall-clock time; the core caps unexpected
 deltas and applies the selected speed to produce simulated time. Returning to
 a backgrounded tab therefore cannot silently advance an entire round.
+Reaching `crfCoachingPauseMs` or `vrCoachingPauseMs` without the corresponding
+gate also appends one automatic `paused` event; each coaching pause fires at
+most once per round and the learner explicitly resumes.
 
 The UI owns `mode: 'simple' | 'advanced'`; mode never changes sim behavior.
 Accessibility speed is different: it is an explicit sim input because it
@@ -80,10 +96,12 @@ and what the creature actually experiences follow the invariant described in
 ## Screens
 
 This list describes the approved v1 screen ownership. `AppShell`,
-`AssessmentScreen`, and the baseline/CRF portions of `TrainingScreen`
+`AssessmentScreen`, and the baseline/CRF/VR portions of `TrainingScreen`
 (including its Advanced-mode live cumulative-record chart, response-rate
-chart, and event table) are currently wired. Onboarding, VR/extinction
-interactions, and `DebriefScreen` remain implementation work.
+chart, event table, and VR reinforcement-history table) are currently wired.
+Extinction timing/completion, mode-specific training copy, and a basic shared
+`DebriefScreen` are wired. Onboarding and the complete mode-neutral summary
+contract remain implementation work.
 
 - **AppShell:** owns the sim instance, mode toggle, accessibility controls,
   and screen navigation.

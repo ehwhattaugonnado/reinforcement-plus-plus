@@ -24,9 +24,18 @@ type CommandRejectionReason =
   | 'not-started'
   | 'already-complete'
   | 'unknown-stimulus'
-  | 'paused'
   | 'invalid-argument'
+  | 'baseline-not-complete'
+  | 'acquisition-not-met'
+  | 'vr-cycles-not-met'
+  | 'extinction-not-complete'
 ```
+
+The completion reasons were added with the baseline-to-CRF, CRF-to-VR,
+VR-to-extinction/debrief, and extinction-to-debrief gates. `vr-cycles-not-met`
+retains the runtime's legacy “cycles” name; learner-facing documentation calls
+the requirement six credited VR deliveries. A paused `tick` is accepted with
+an empty event list, so `paused` is not a rejection reason.
 
 Rules:
 

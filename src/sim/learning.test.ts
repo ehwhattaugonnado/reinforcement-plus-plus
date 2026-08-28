@@ -106,6 +106,33 @@ describe('deriveStimulusValue (satiation decay and bounded recovery)', () => {
     )
   })
 
+  it('preserves assessment-access satiation in later unified value derivation', () => {
+    const selected: SimEvent = {
+      type: 'creature-selected',
+      at: 0,
+      stimulusId: 'treat',
+    }
+    const afterAccess = deriveStimulusValue(
+      [selected],
+      'treat',
+      basePreference,
+      0,
+      config,
+    )
+    expect(afterAccess).toBeCloseTo(
+      basePreference * (1 - config.assessmentSatiationPerAccess),
+    )
+    expect(
+      deriveStimulusValue(
+        [selected, delivery({ at: 1 })],
+        'treat',
+        basePreference,
+        1,
+        config,
+      ),
+    ).toBeLessThan(afterAccess)
+  })
+
   it('decays with each delivery, floor-bounded', () => {
     const events = promptContingentSeries(10, 1) // deliveries back to back, no recovery time
     const value = deriveStimulusValue(

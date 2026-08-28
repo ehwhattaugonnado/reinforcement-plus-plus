@@ -79,7 +79,10 @@ instant of each delivery.
 ## 3. Event log
 
 The event log is append-only and is the source for graphs, the data table,
-summary statistics, debrief text, and deterministic replay. See
+summary statistics, debrief text, and deterministic replay at event
+boundaries. A live session also has an ephemeral controlled-clock cursor:
+`elapsedSimMs` can move between events, but it is not an independent source of
+historical or displayed facts. See
 [ADR 0001](../adr/0001-event-sourced-session-state.md).
 
 At minimum it distinguishes:
@@ -87,7 +90,7 @@ At minimum it distinguishes:
 ```ts
 type SimEvent =
   | { type: 'session-started'; at: 0; seed: string; speed: 0.5 | 1; configVersion: string }
-  | { type: 'paused'; at: number }
+  | { type: 'paused'; at: number; reason?: 'user' | 'coaching'; round?: 'crf' | 'vr' }
   | { type: 'resumed'; at: number }
   | { type: 'speed-changed'; at: number; speed: 0.5 | 1 }
   | { type: 'pair-presented'; at: number; leftId: string; rightId: string }
@@ -124,6 +127,12 @@ exceptions. `configVersion` identifies the `SimConfig` constants (Section 6) a
 log was produced under, so an old log is never silently reinterpreted under
 new thresholds.
 
+A user pause records `reason: 'user'`. The one-time automatic pauses at the CRF
+and VR coaching thresholds record `reason: 'coaching'` and their `round`, so
+replay and projectors can distinguish them and resuming cannot immediately
+trigger the same coaching pause again. The optional fields preserve replay of
+earlier in-memory fixture shapes.
+
 The creature's choice for a presented pair (Core Loop, Phase A) is decided in
 the command handler, drawing only from the seeded behavior RNG, and is written
 into `creature-selected.stimulusId` (`null` for a no-selection trial). The
@@ -141,9 +150,11 @@ round-boundary instant (two events can share the exact same simulated `at`).
 Live VR play does not currently emit `criterion-met`/`criterion-missed`
 (see [ADR 0010](../adr/0010-vr-fidelity-as-running-average.md)); those
 types still carry `schedule: 'CRF' | 'VR'` because CRF continues to use
-them, and a future extinction-round design may reuse the `'VR'` literal for
-synthesized withheld-criterion events (undecided, Milestone 6 UI/timing is
-not yet built).
+them and extinction emits live `criterion-met` events stamped `'VR'` to mark
+responses whose formerly scheduled consequence is now withheld. Extinction
+does not emit `criterion-missed` or `cycle-abandoned`: withholding is the
+procedure, not a learner fidelity error. The first such live criterion anchors
+the burst-detection window.
 
 An active response has a default prompt-delivery window of 1,500 simulated
 milliseconds (`promptDeliveryWindowMs`). The window is fixed in simulated time
@@ -300,7 +311,9 @@ second mutable data path:
   against whether it repeats the same gap too many times in a row
   (`not-variable`). `premature`, `overrun`, and `not-variable` deliveries are
   still part of the creature's experienced reinforcement history (ADR 0003);
-  they are simply not credited toward the round's required cycles.
+  they are simply not credited toward the round's required deliveries.
+  `vrCyclesToComplete` and `vrCyclesCompleted` are retained legacy code names;
+  “credited deliveries” is the semantic and learner-facing term.
 - **Response rate by phase/window:** response events divided by observed
   simulated time, excluding pauses.
 
@@ -344,12 +357,21 @@ burst, and the detector never reads the seeded `extinctionBurstPrimed`/
 output. When the rule is not met, the debrief states explicitly that no burst
 occurred in this run and that bursts are not inevitable.
 
+The optional extinction round lasts `extinctionDurationMs` (150000 simulated
+ms). After completed VR, `finishSession()` skips directly to `debrief` without
+opening an extinction span. Once an extinction span is open and its duration
+is complete, the same command moves it to `debrief`; earlier calls are rejected
+atomically.
+
 ## 6. Configuration constants
 
 Every threshold above is a named field of a single `SimConfig` object owned by
 the simulation core, not a literal scattered through rules or UI. Tests
-override it explicitly; the UI never reads or writes it. `configVersion` is
-stamped into `session-started`.
+override it explicitly; production components do not read, write, or override
+it. Components consume configured, event-derived projections supplied by the
+core. `TrainingScreen` and the current app-layer debrief projector import
+`DEFAULT_SIM_CONFIG` for several projections; removing those dependencies is
+known architecture cleanup. `configVersion` is stamped into `session-started`.
 
 | Constant | v1 default | Used by |
 |---|---|---|
@@ -371,8 +393,9 @@ stamped into `session-started`.
 | `vrAverageSeedValue` | 3 | VR fidelity: value of each phantom prior entry |
 | `vrAverageSeedCount` | 3 | VR fidelity: number of phantom prior entries |
 | `vrPatternRepeatThreshold` | 3 | VR fidelity: consecutive identical real gaps that trigger `not-variable` |
-| `vrCyclesToComplete` | 6 | Round 2 completion |
-| `vrCoachingPauseMs` | 240000 simulated ms | Round 2 coaching pause |
+| `vrCyclesToComplete` | 6 | Round 2 completion after six credited deliveries (legacy field name) |
+| `vrCoachingPauseMs` | 240000 simulated ms | One-time automatic Round 2 coaching pause |
+| `extinctionDurationMs` | 150000 simulated ms | Optional extinction-round completion |
 | `reinforcerEvidenceMinDeliveries` | 6 | Reinforcer-evidence rule |
 | `reinforcerEvidenceWindowMs` | 60000 simulated ms | Reinforcer-evidence rule |
 | `reinforcerEvidenceRelativeIncrease` | 0.20 | Reinforcer-evidence rule |

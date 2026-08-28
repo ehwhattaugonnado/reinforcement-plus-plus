@@ -50,7 +50,7 @@ export function deriveOutstandingCycle(
 ): OutstandingCycle | null {
   let open: CriterionMet | null = null
   for (const e of events) {
-    if (e.type === 'criterion-met') {
+    if (e.type === 'criterion-met' && e.schedule === 'CRF') {
       open = e
     } else if (open !== null) {
       if (
@@ -257,7 +257,8 @@ export function deriveCrfMetrics(
   // exclusive upper bound would silently drop the most recent event.
   const inWindow = (at: number) => at >= fromMs && at <= toMs
   const deliveries = events.filter(
-    (e): e is Delivery => e.type === 'stimulus-delivered' && inWindow(e.at),
+    (e): e is Delivery =>
+      e.type === 'stimulus-delivered' && e.schedule === 'CRF' && inWindow(e.at),
   )
   const contingent = deliveries.filter(
     (d) => d.contingency === 'response-contingent',
@@ -371,4 +372,17 @@ export function crfCoachingDue(
   if (window === null || window.endMs !== null) return false
   if (elapsedSimMs - window.startMs < config.crfCoachingPauseMs) return false
   return !crfAcquisitionMet(events, elapsedSimMs, config)
+}
+
+export function crfCoachingPauseRecorded(events: readonly SimEvent[]): boolean {
+  const window = crfRoundWindow(events)
+  if (window === null) return false
+  return events.some(
+    (e) =>
+      e.type === 'paused' &&
+      e.reason === 'coaching' &&
+      e.round === 'crf' &&
+      e.at >= window.startMs &&
+      (window.endMs === null || e.at <= window.endMs),
+  )
 }

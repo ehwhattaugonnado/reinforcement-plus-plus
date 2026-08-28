@@ -60,9 +60,10 @@ be interpreted; it is not scored as player performance. Its duration is
   deliveries made when no response is active.
 - The round advances only after both `crfMinOnScheduleDeliveries` and the
   acquisition-rate threshold defined in the data model's derived-metrics
-  section are reached. At `crfCoachingPauseMs`, the round pauses to offer
-  corrective coaching rather than silently advancing to VR before the
-  response is established.
+  section are reached. At `crfCoachingPauseMs`, the simulation automatically
+  appends a one-time `paused` event and offers corrective coaching rather than
+  silently advancing to VR before the response is established. The learner
+  explicitly resumes after reading it.
 - The acquisition gate is deliberately stricter than the reinforcer-evidence
   rule: a run can advance to VR only after the response is established,
   whereas evidence of a reinforcing effect can be claimed on slightly less
@@ -84,7 +85,7 @@ be interpreted; it is not scored as player performance. Its duration is
   (2-4) it's `on-schedule` and joins the average; below range it's
   `premature`, above it's `overrun` — either way it is still delivered to
   the creature and is part of the actual reinforcement history experienced
-  (ADR 0003), it just is not credited toward the round's required cycles.
+  (ADR 0003), it just is not credited toward the round's required deliveries.
 - A delivery that averages correctly but repeats the same gap too many
   times in a row (default: three identical real gaps) is `not-variable`
   instead of `on-schedule` — still delivered, still not credited. This
@@ -93,19 +94,26 @@ be interpreted; it is not scored as player performance. Its duration is
 - The UI shows the live response count, the running average, and a
   trial-by-trial history of which responses earned credited reinforcement.
   The player must still deliver the stimulus manually and promptly.
-- The round ends after `vrCyclesToComplete` completed (`on-schedule`)
-  cycles. At `vrCoachingPauseMs`, it pauses and offers corrective coaching
-  if that criterion has not been reached.
+- The round ends after `vrCyclesToComplete` credited (`on-schedule`)
+  deliveries. `vrCyclesToComplete` is a legacy runtime/configuration name;
+  learner-facing copy calls these credited deliveries, because ADR 0010's VR
+  model has no discrete cycles or due instant. At `vrCoachingPauseMs`, the
+  simulation automatically appends a one-time `paused` event and offers
+  corrective coaching if that criterion has not been reached. The learner
+  explicitly resumes after reading it.
 
 This progression teaches CRF as an acquisition schedule and VR as a
-maintenance schedule. An independent practice variant that hides the
-eligibility signal is a stretch goal.
+maintenance schedule. V1's guided VR feedback is the visible response count,
+running average, and reinforcement history. ADR 0010 deliberately has no
+discrete “reinforcement due” cue because no exact per-delivery target exists.
+An unguided practice variant that hides this feedback is deferred.
 
 ### Round 3: Optional extinction-effects demonstration
 
-After a stable reinforcement history has been established, the player may run
-a short, clearly framed demonstration in which the established consequence is
-withheld. The simulation may produce a burst, response variation, another
+After a stable reinforcement history has been established, the player may
+skip directly to debrief or run a short, clearly framed demonstration in which
+the established consequence is withheld. The simulation may produce a burst,
+response variation, another
 transitional pattern, or a decline without a burst. The outcome is seeded and
 probabilistic; the game never states or implies that a burst always occurs.
 Whether the run is reported as a burst is decided by the transparent
@@ -117,6 +125,13 @@ is compared against is unambiguous.
 
 This round is observational and is never framed as a recommended real-world
 intervention. A learner may skip it and still complete the session.
+
+The production round lasts `extinctionDurationMs` (v1 default: 150 simulated
+seconds), giving the configured 90-second detection window room to finish after
+the first live response opens the first withheld criterion. Once the duration
+has elapsed, `finishSession()` moves the session to `debrief`. A learner who
+skips from completed VR calls the same command and moves directly to `debrief`
+without opening an extinction span.
 
 ## Debrief
 

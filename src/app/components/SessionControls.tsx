@@ -59,9 +59,12 @@ export function SessionControls({
         ))}
       </fieldset>
 
-      {/* Status is announced textually and never carried by colour alone. */}
+      {/* Only command-driven state belongs in the live region. Elapsed time is
+          deliberately separate so the clock cannot announce every second. */}
       <p role="status" className="session-status">
-        {state.paused ? 'Paused.' : 'Running'} {state.speed}&times; speed.{' '}
+        {state.paused ? 'Paused.' : 'Running.'} {state.speed}&times; speed.
+      </p>
+      <p className="session-elapsed">
         {Math.round(state.elapsedSimMs / 1000)} seconds elapsed in this session.
       </p>
     </div>

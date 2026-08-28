@@ -1,15 +1,20 @@
 # Testing Strategy
 
-**Implementation status (2026-08-27):** Vitest currently covers the simulation
+**Implementation status (2026-08-28):** Vitest currently covers the simulation
 foundation, paired assessment, baseline/learning model, CRF cycle
 classification and acquisition/coaching gates, evidence rules, the live
 seeded extinction-transition burst model and its detector (including known
 burst/no-burst/indeterminate seeds and cohort-level causal/tolerance
-assertions), chart data, chart views, and shell/screen integration. Playwright
-covers shell smoke, pause/speed controls, keyboard operation, and automated
-axe checks. VR cycle behavior, shared debrief conclusions, the complete
-learner path, background pausing, reduced motion, and manual accessibility
-review remain open with their corresponding milestones.
+assertions), VR running-average classification, the fixed-ratio-in-disguise
+check, VR progress/history, chart data, chart views, and shell/screen
+integration. Playwright covers shell smoke, pause/speed controls, keyboard
+operation, and automated
+axe checks. The extinction timing/finish contract and a basic shared debrief
+screen are now present; comprehensive summary/conclusion parity tests, the
+complete learner-path E2E, background-pausing E2E coverage, reduced motion,
+and manual accessibility review remain open. Background auto-pause is
+implemented in `useSimState`; it is the browser-level regression coverage that
+remains open.
 
 See also: [Product Spec](./product-spec.md) · [Core Loop](./core-loop.md) ·
 [Architecture Overview](./architecture/overview.md) ·
@@ -42,7 +47,13 @@ Use Vitest with deterministic seeds. Test:
   counting the `criterion-missed` emitted alongside it.
 - Prompt-delivery rate is invariant across 0.5x and 1x for the same
   simulated-time behavior.
+- CRF and VR coaching thresholds append exactly one replayable `paused` event,
+  remain paused until explicit resume, and do not immediately re-pause.
 - Both extinction-burst and no-burst paths using known seeds.
+- Extinction emits live withheld-response criteria, lasts 150 simulated
+  seconds, and permits `finishSession()` only after completion; the same
+  command skips directly from completed VR to debrief without an extinction
+  span.
 - Summary and debrief rules, including correct use of "preferred stimulus"
   versus "reinforcer."
 

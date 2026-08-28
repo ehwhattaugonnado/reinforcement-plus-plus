@@ -37,6 +37,10 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 type Delivery = Extract<SimEvent, { type: 'stimulus-delivered' }>
+type ValueEvent = Extract<
+  SimEvent,
+  { type: 'creature-selected' | 'stimulus-delivered' }
+>
 
 function deliveriesUpTo(events: readonly SimEvent[], atMs: number): Delivery[] {
   const out: Delivery[] = []
@@ -103,29 +107,40 @@ export function deriveStimulusValue(
   atMs: number,
   config: SimConfig,
 ): number {
-  const deliveries = deliveriesUpTo(events, atMs).filter(
-    (d) => d.stimulusId === stimulusId,
+  const valueEvents = events.filter(
+    (event): event is ValueEvent =>
+      event.at <= atMs &&
+      ((event.type === 'creature-selected' &&
+        event.stimulusId === stimulusId) ||
+        (event.type === 'stimulus-delivered' &&
+          event.stimulusId === stimulusId)),
   )
-  if (deliveries.length === 0) return basePreference
+  if (valueEvents.length === 0) return basePreference
 
   const recoveryTarget =
     basePreference * config.satiationRecoveryCeilingFraction
   let value = basePreference
   let lastAt: number | null = null
-  for (const delivery of deliveries) {
+  for (const valueEvent of valueEvents) {
     if (lastAt !== null) {
       value = recoverToward(
         value,
         recoveryTarget,
-        delivery.at - lastAt,
+        valueEvent.at - lastAt,
         config.satiationRecoveryTimeConstantMs,
       )
     }
-    value = Math.max(
-      config.stimulusValueFloor,
-      value * (1 - config.satiationDecayFraction),
-    )
-    lastAt = delivery.at
+    value =
+      valueEvent.type === 'creature-selected'
+        ? Math.max(
+            basePreference * config.assessmentSatiationFloorFraction,
+            value * (1 - config.assessmentSatiationPerAccess),
+          )
+        : Math.max(
+            config.stimulusValueFloor,
+            value * (1 - config.satiationDecayFraction),
+          )
+    lastAt = valueEvent.at
   }
   if (lastAt !== null) {
     value = recoverToward(

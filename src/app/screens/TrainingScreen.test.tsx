@@ -90,6 +90,7 @@ function tickUntilNextResponse(
   stepMs: number,
   guard = 5000,
 ): void {
+  if (session.getSnapshot().paused) session.setPaused(false)
   const before = session
     .getSnapshot()
     .events.filter((e) => e.type === 'response-emitted').length
@@ -116,9 +117,19 @@ describe('TrainingScreen', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows a stimulus-value table as the accessible alternative to any graphic', () => {
+  it('shows technical stimulus values only in Advanced mode', () => {
     const session = baselineSession('training-screen-2')
-    render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+    const { rerender } = render(
+      <TrainingScreen state={session.getSnapshot()} session={session} />,
+    )
+    expect(screen.queryByText(/current value/i)).not.toBeInTheDocument()
+    rerender(
+      <TrainingScreen
+        state={session.getSnapshot()}
+        session={session}
+        mode="advanced"
+      />,
+    )
     expect(
       screen.getByRole('columnheader', { name: /stimulus/i }),
     ).toBeInTheDocument()
@@ -129,14 +140,14 @@ describe('TrainingScreen', () => {
     const session = baselineSession('training-screen-3')
     render(<TrainingScreen state={session.getSnapshot()} session={session} />)
     expect(
-      screen.queryByRole('button', { name: /start crf/i }),
+      screen.queryByRole('button', { name: /start training/i }),
     ).not.toBeInTheDocument()
 
     for (let i = 0; i < DEFAULT_SIM_CONFIG.baselineDurationMs / 50; i++)
       session.tick(50)
     render(<TrainingScreen state={session.getSnapshot()} session={session} />)
     expect(
-      screen.getByRole('button', { name: /start crf/i }),
+      screen.getByRole('button', { name: /start training/i }),
     ).toBeInTheDocument()
   })
 
@@ -147,7 +158,7 @@ describe('TrainingScreen', () => {
       session.tick(50)
     render(<TrainingScreen state={session.getSnapshot()} session={session} />)
 
-    await user.click(screen.getByRole('button', { name: /start crf/i }))
+    await user.click(screen.getByRole('button', { name: /start training/i }))
     expect(session.getSnapshot().phase).toBe('crf')
   })
 
@@ -389,12 +400,20 @@ describe('TrainingScreen', () => {
       const session = crfSession('training-crf-2')
       tickUntilNextResponse(session, 50)
       const { rerender } = render(
-        <TrainingScreen state={session.getSnapshot()} session={session} />,
+        <TrainingScreen
+          state={session.getSnapshot()}
+          session={session}
+          mode="advanced"
+        />,
       )
 
       await user.click(screen.getByRole('button', { name: /deliver/i }))
       rerender(
-        <TrainingScreen state={session.getSnapshot()} session={session} />,
+        <TrainingScreen
+          state={session.getSnapshot()}
+          session={session}
+          mode="advanced"
+        />,
       )
 
       const last = session.getSnapshot().events.at(-1)
@@ -407,7 +426,13 @@ describe('TrainingScreen', () => {
     it('the documented "D" keyboard shortcut delivers without needing focus on the button', () => {
       const session = crfSession('training-crf-3')
       tickUntilNextResponse(session, 50)
-      render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+      render(
+        <TrainingScreen
+          state={session.getSnapshot()}
+          session={session}
+          mode="advanced"
+        />,
+      )
 
       const before = session.getSnapshot().events.length
       fireEvent.keyDown(window, { key: 'd' })
@@ -417,10 +442,31 @@ describe('TrainingScreen', () => {
       )
     })
 
+    it('ignores keyboard auto-repeat for the D shortcut', () => {
+      const session = crfSession('training-crf-repeat')
+      tickUntilNextResponse(session, 50)
+      render(
+        <TrainingScreen
+          state={session.getSnapshot()}
+          session={session}
+          mode="advanced"
+        />,
+      )
+      const before = session.getSnapshot().events.length
+      fireEvent.keyDown(window, { key: 'd', repeat: true })
+      expect(session.getSnapshot().events).toHaveLength(before)
+    })
+
     it('announces that reinforcement is due before any delivery is made', () => {
       const session = crfSession('training-crf-4')
       tickUntilNextResponse(session, 50)
-      render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+      render(
+        <TrainingScreen
+          state={session.getSnapshot()}
+          session={session}
+          mode="advanced"
+        />,
+      )
       expect(
         screen.getByText(/reinforcement is due/i, { exact: false }),
       ).toBeInTheDocument()
@@ -434,10 +480,16 @@ describe('TrainingScreen', () => {
       const session = crfSession('training-crf-5')
       for (let i = 0; i < DEFAULT_SIM_CONFIG.crfCoachingPauseMs / 50 + 20; i++)
         session.tick(50)
-      render(<TrainingScreen state={session.getSnapshot()} session={session} />)
-      expect(
-        screen.getByText(/coaching/i, { exact: false }),
-      ).toBeInTheDocument()
+      render(
+        <TrainingScreen
+          state={session.getSnapshot()}
+          session={session}
+          mode="advanced"
+        />,
+      )
+      expect(document.querySelector('.crf-status')).toHaveTextContent(
+        /coaching/i,
+      )
     })
 
     it('offers to advance to VR only once the acquisition gate is met', () => {
@@ -459,6 +511,12 @@ describe('TrainingScreen', () => {
   })
 
   describe('VR-3 maintenance (Milestone 5)', () => {
+    it('explains the varying running-average task without claiming a due cue exists', () => {
+      const session = vrSession('training-vr-guidance')
+      render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+      expect(screen.getByText(/there is no.*due.*cue/i)).toBeInTheDocument()
+      expect(screen.queryByText(/watch for.*due/i)).not.toBeInTheDocument()
+    })
     it('reuses the delivery target and keyboard shortcut for VR', () => {
       const session = vrSession('training-vr-1')
       render(<TrainingScreen state={session.getSnapshot()} session={session} />)
@@ -480,12 +538,20 @@ describe('TrainingScreen', () => {
       // gap=3 matches the seeded average exactly (see deliverAfterGap doc).
       for (let i = 0; i < 3; i++) tickUntilNextResponse(session, 50)
       const { rerender } = render(
-        <TrainingScreen state={session.getSnapshot()} session={session} />,
+        <TrainingScreen
+          state={session.getSnapshot()}
+          session={session}
+          mode="advanced"
+        />,
       )
 
       await user.click(screen.getByRole('button', { name: /deliver/i }))
       rerender(
-        <TrainingScreen state={session.getSnapshot()} session={session} />,
+        <TrainingScreen
+          state={session.getSnapshot()}
+          session={session}
+          mode="advanced"
+        />,
       )
 
       const last = session.getSnapshot().events.at(-1)
@@ -498,7 +564,13 @@ describe('TrainingScreen', () => {
     it('the documented "D" keyboard shortcut delivers in VR too', () => {
       const session = vrSession('training-vr-3')
       for (let i = 0; i < 3; i++) tickUntilNextResponse(session, 50)
-      render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+      render(
+        <TrainingScreen
+          state={session.getSnapshot()}
+          session={session}
+          mode="advanced"
+        />,
+      )
 
       const before = session.getSnapshot().events.length
       fireEvent.keyDown(window, { key: 'd' })
@@ -537,10 +609,16 @@ describe('TrainingScreen', () => {
       const session = vrSession('training-vr-6')
       for (let i = 0; i < DEFAULT_SIM_CONFIG.vrCoachingPauseMs / 50 + 20; i++)
         session.tick(50)
-      render(<TrainingScreen state={session.getSnapshot()} session={session} />)
-      expect(
-        screen.getByText(/coaching/i, { exact: false }),
-      ).toBeInTheDocument()
+      render(
+        <TrainingScreen
+          state={session.getSnapshot()}
+          session={session}
+          mode="advanced"
+        />,
+      )
+      expect(document.querySelector('.vr-status')).toHaveTextContent(
+        /coaching/i,
+      )
     })
 
     it('has no automatically detectable accessibility violations in the VR round', async () => {
@@ -560,12 +638,28 @@ describe('TrainingScreen', () => {
       deliverAfterGap(session, 2)
       deliverAfterGap(session, 30)
       const { getByRole } = render(
-        <TrainingScreen state={session.getSnapshot()} session={session} />,
+        <TrainingScreen
+          state={session.getSnapshot()}
+          session={session}
+          mode="advanced"
+        />,
       )
 
       const table = getByRole('table', { name: /reinforcement history/i })
       expect(table).toHaveTextContent('+')
       expect(table).toHaveTextContent('×')
+    })
+
+    it('offers both the optional observation and a skip-to-debrief path', () => {
+      const session = vrSession('training-vr-choices')
+      completeVrCycles(session, DEFAULT_SIM_CONFIG.vrCyclesToComplete)
+      render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+      expect(
+        screen.getByRole('button', { name: /optional extinction/i }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: /skip.*debrief/i }),
+      ).toBeInTheDocument()
     })
   })
 })

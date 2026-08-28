@@ -1,17 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  DEFAULT_SIM_CONFIG,
   STIMULUS_LABELS,
   buildCumulativeRecordChartData,
   buildResponseRateChartData,
-  crfAcquisitionMet,
-  crfCoachingDue,
-  deriveCrfMetrics,
-  deriveOutstandingCycle,
-  isBaselineComplete,
-  vrCoachingDue,
-  vrCyclesCompleted,
-  vrTrialHistory,
   type SessionState,
   type SimSession,
   type StimulusId,
@@ -23,11 +14,18 @@ import {
 } from '../charts'
 import type { Mode } from '../hooks/useMode'
 
-const PHASE_COPY: Record<string, string> = {
+const SIMPLE_PHASE_COPY: Record<string, string> = {
+  baseline: 'First, watch Pip on their own before training begins.',
+  crf: 'Now deliver the chosen item after every response.',
+  vr: 'Now vary how many responses happen before each delivery.',
+  extinction: 'Optional: watch what happens when deliveries stop.',
+}
+
+const ADVANCED_PHASE_COPY: Record<string, string> = {
   baseline: 'Baseline: watching Pip on their own, before any training.',
   crf: 'CRF acquisition: reinforce every response.',
-  vr: 'VR-3 maintenance: reinforce on a varying schedule.',
-  extinction: 'Optional extinction demonstration.',
+  vr: 'VR-3 maintenance: use a varying responses-per-delivery pattern.',
+  extinction: 'Optional extinction-effects demonstration.',
 }
 
 /**
@@ -58,37 +56,30 @@ export function TrainingScreen({
     return null
   }, [state.events, state.elapsedSimMs])
 
+  const trainingStatus = useMemo(
+    () => session.getTrainingStatus(),
+    [session, state],
+  )
   const baselineDone =
-    state.phase === 'baseline' &&
-    isBaselineComplete(state.events, state.elapsedSimMs, DEFAULT_SIM_CONFIG)
+    state.phase === 'baseline' && trainingStatus.baselineComplete
 
   // --- CRF acquisition (Milestone 4) ---
 
   const stimuli = state.creature.stimuli
+  const assessmentSummary = useMemo(
+    () => session.getDebriefSummary().assessment,
+    [session, state.events],
+  )
+  const preferenceOrder = assessmentSummary.hierarchy
   const [selectedStimulusId, setSelectedStimulusId] = useState<StimulusId>(
     () =>
-      stimuli.reduce((best, s) =>
-        s.currentValue > best.currentValue ? s : best,
-      ).stimulusId as StimulusId,
+      (preferenceOrder[0]?.stimulusId ?? stimuli[0]?.stimulusId) as StimulusId,
   )
 
-  const outstandingCycle = useMemo(
-    () => deriveOutstandingCycle(state.events, DEFAULT_SIM_CONFIG),
-    [state.events],
-  )
-  const crfMetrics = useMemo(
-    () => deriveCrfMetrics(state.events),
-    [state.events],
-  )
-  const acquisitionMet = useMemo(
-    () =>
-      crfAcquisitionMet(state.events, state.elapsedSimMs, DEFAULT_SIM_CONFIG),
-    [state.events, state.elapsedSimMs],
-  )
-  const coachingDue = useMemo(
-    () => crfCoachingDue(state.events, state.elapsedSimMs, DEFAULT_SIM_CONFIG),
-    [state.events, state.elapsedSimMs],
-  )
+  const outstandingCycle = trainingStatus.outstandingCycle
+  const crfMetrics = trainingStatus.crfMetrics
+  const acquisitionMet = trainingStatus.acquisitionMet
+  const coachingDue = trainingStatus.crfCoachingDue
 
   const deliver = useCallback(() => {
     if (state.phase !== 'crf' && state.phase !== 'vr') return
@@ -104,6 +95,7 @@ export function TrainingScreen({
     const onKeyDown = (event: KeyboardEvent) => {
       if (
         event.key.toLowerCase() === 'd' &&
+        !event.repeat &&
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey
@@ -152,20 +144,11 @@ export function TrainingScreen({
 
   // --- VR-3 maintenance (Milestone 5) ---
 
-  const vrCyclesCompletedCount = useMemo(
-    () => vrCyclesCompleted(state.events),
-    [state.events],
-  )
-  const vrCoachingDueFlag = useMemo(
-    () => vrCoachingDue(state.events, state.elapsedSimMs, DEFAULT_SIM_CONFIG),
-    [state.events, state.elapsedSimMs],
-  )
-  const vrCyclesRemaining =
-    DEFAULT_SIM_CONFIG.vrCyclesToComplete - vrCyclesCompletedCount
-  const vrTrialHistoryList = useMemo(
-    () => vrTrialHistory(state.events),
-    [state.events],
-  )
+  const vrCyclesCompletedCount = trainingStatus.vrCredited
+  const vrCoachingDueFlag = trainingStatus.vrCoachingDue
+  const vrCyclesRemaining = trainingStatus.vrRemaining
+  const vrTrialHistoryList = trainingStatus.vrHistory
+  const extinctionComplete = trainingStatus.extinctionComplete
 
   // VR-3 has no discrete "the schedule is now due" instant (ADR 0010): every
   // delivery is judged independently against the round's running average of
@@ -175,7 +158,7 @@ export function TrainingScreen({
   const vrStatusText = (() => {
     if (vrCoachingDueFlag) {
       return (
-        `Coaching: the ${DEFAULT_SIM_CONFIG.vrCyclesToComplete} on-schedule cycles have not been reached yet. ` +
+        `Coaching: the ${trainingStatus.vrRequired} on-schedule cycles have not been reached yet. ` +
         `${state.creature.name}'s reinforcement history is judged by a ` +
         `running average, not a fixed count -- try delivering after a ` +
         `varying number of responses rather than the same number every time.`
@@ -210,6 +193,27 @@ export function TrainingScreen({
     return `Waiting for ${state.creature.name} to respond.`
   })()
 
+  const simpleCrfStatusText = coachingDue
+    ? `Pause and refocus: deliver right after every response from ${state.creature.name}.`
+    : lastDelivery !== undefined
+      ? lastDelivery.contingency === 'noncontingent'
+        ? 'That delivery did not follow a response, so it cannot strengthen that response.'
+        : lastDelivery.timing === 'prompt'
+          ? 'Delivered promptly after a response.'
+          : 'That delivery came too late after the response.'
+      : outstandingCycle !== null
+        ? `${state.creature.name} just responded. Deliver now.`
+        : `Waiting for ${state.creature.name} to respond.`
+  const simpleVrStatusText = vrCoachingDueFlag
+    ? 'Try changing the number of responses between deliveries instead of repeating one pattern.'
+    : lastDelivery !== undefined
+      ? lastDelivery.contingency === 'noncontingent'
+        ? 'That delivery did not follow a response.'
+        : lastDelivery.scheduleFidelity === 'on-schedule'
+          ? 'That delivery fit the varied pattern.'
+          : 'Keep varying the response count while averaging about three.'
+      : 'Choose changing response counts, such as two, then four, then three.'
+
   // The current round is still open while training is in progress, so `now`
   // must be passed explicitly as `state.elapsedSimMs` rather than left to
   // default to the latest logged event — otherwise an idle open round
@@ -229,7 +233,11 @@ export function TrainingScreen({
   return (
     <section aria-labelledby="training-heading">
       <h2 id="training-heading">Training</h2>
-      <p>{PHASE_COPY[state.phase] ?? state.phase}</p>
+      <p>
+        {(mode === 'simple' ? SIMPLE_PHASE_COPY : ADVANCED_PHASE_COPY)[
+          state.phase
+        ] ?? state.phase}
+      </p>
 
       {/*
         Deliberately not a live region: it changes on every response (every
@@ -251,46 +259,57 @@ export function TrainingScreen({
       {state.phase === 'baseline' && (
         <p role="status">
           {baselineDone
-            ? 'Baseline complete. Choose a stimulus informed by the preference hierarchy, then start CRF.'
+            ? mode === 'simple'
+              ? 'Watching complete. Choose an item informed by the preference hierarchy, then start training.'
+              : 'Baseline complete. Choose a stimulus informed by the preference hierarchy, then start CRF.'
             : 'Baseline in progress: this is a reference measurement and is not scored.'}
         </p>
       )}
 
       {state.phase === 'baseline' && baselineDone && (
-        <button type="button" onClick={() => void session.startRound('crf')}>
-          Start CRF acquisition
-        </button>
+        <section aria-labelledby="training-choice-heading">
+          <h3 id="training-choice-heading">Choose an item to test</h3>
+          <p>
+            The assessment ranked these items from most to least often chosen.
+            The ranking makes the choice informed, but the item is still only a
+            preferred stimulus until future responding shows whether it
+            functioned as a reinforcer.
+          </p>
+          <StimulusPicker
+            name="baseline-stimulus"
+            selected={selectedStimulusId}
+            onSelect={setSelectedStimulusId}
+            hierarchy={preferenceOrder}
+          />
+          <button type="button" onClick={() => void session.startRound('crf')}>
+            {mode === 'simple' ? 'Start training' : 'Start CRF acquisition'}
+          </button>
+        </section>
       )}
 
       {state.phase === 'crf' && (
         <section aria-labelledby="crf-heading" className="crf-round">
-          <h3 id="crf-heading">CRF acquisition</h3>
+          <h3 id="crf-heading">
+            {mode === 'simple'
+              ? 'Deliver after every response'
+              : 'CRF acquisition'}
+          </h3>
           <p>
-            Every response from {state.creature.name} earns reinforcement.
-            Choose what to deliver, then deliver it right after{' '}
-            {state.creature.name} responds -- promptness and consistency are
-            what build the association.
+            Every response from {state.creature.name} should be followed by a
+            delivery. Choose a preferred item, then deliver it right after{' '}
+            {state.creature.name} responds. Promptness and consistency are what
+            let us test whether the item increases future responding.
           </p>
 
-          <fieldset>
-            <legend>What to deliver</legend>
-            {stimuli.map((s) => (
-              <label key={s.stimulusId}>
-                <input
-                  type="radio"
-                  name="crf-stimulus"
-                  checked={selectedStimulusId === s.stimulusId}
-                  onChange={() =>
-                    setSelectedStimulusId(s.stimulusId as StimulusId)
-                  }
-                />
-                {STIMULUS_LABELS[s.stimulusId as StimulusId]}
-              </label>
-            ))}
-          </fieldset>
+          <StimulusPicker
+            name="crf-stimulus"
+            selected={selectedStimulusId}
+            onSelect={setSelectedStimulusId}
+            hierarchy={preferenceOrder}
+          />
 
           <p role="status" className="crf-status">
-            {crfStatusText}
+            {mode === 'simple' ? simpleCrfStatusText : crfStatusText}
           </p>
 
           <button type="button" className="delivery-target" onClick={deliver}>
@@ -301,27 +320,35 @@ export function TrainingScreen({
             Keyboard shortcut: press <kbd>D</kbd> to deliver.
           </p>
 
-          <p className="crf-progress">
-            On-schedule deliveries: {crfMetrics.onScheduleDeliveries} of{' '}
-            {DEFAULT_SIM_CONFIG.crfMinOnScheduleDeliveries} needed.{' '}
-            {crfMetrics.contingentDeliveryRate === null
-              ? 'No deliveries yet.'
-              : `Contingent-delivery rate: ${Math.round(
-                  crfMetrics.contingentDeliveryRate * 100,
-                )}%. Prompt-delivery rate: ${
-                  crfMetrics.promptDeliveryRate === null
-                    ? 'n/a'
-                    : `${Math.round(crfMetrics.promptDeliveryRate * 100)}%`
-                }.`}{' '}
-            Missed criteria: {crfMetrics.missedCriteria}. Premature deliveries:{' '}
-            {crfMetrics.prematureDeliveries}. Noncontingent deliveries:{' '}
-            {crfMetrics.noncontingentDeliveries}. Overruns:{' '}
-            {crfMetrics.overrunDeliveries}.
-          </p>
+          {mode === 'advanced' ? (
+            <p className="crf-progress">
+              On-schedule deliveries: {crfMetrics.onScheduleDeliveries}.{' '}
+              {crfMetrics.contingentDeliveryRate === null
+                ? 'No deliveries yet.'
+                : `Contingent-delivery rate: ${Math.round(
+                    crfMetrics.contingentDeliveryRate * 100,
+                  )}%. Prompt-delivery rate: ${
+                    crfMetrics.promptDeliveryRate === null
+                      ? 'n/a'
+                      : `${Math.round(crfMetrics.promptDeliveryRate * 100)}%`
+                  }.`}{' '}
+              Missed criteria: {crfMetrics.missedCriteria}. Premature
+              deliveries: {crfMetrics.prematureDeliveries}. Noncontingent
+              deliveries: {crfMetrics.noncontingentDeliveries}. Overruns:{' '}
+              {crfMetrics.overrunDeliveries}.
+            </p>
+          ) : (
+            <p>
+              Keep delivering promptly after each response. You can continue
+              when the response pattern has increased reliably.
+            </p>
+          )}
 
           {acquisitionMet && (
             <button type="button" onClick={() => void session.startRound('vr')}>
-              Advance to VR-3 maintenance
+              {mode === 'simple'
+                ? 'Continue to varied practice'
+                : 'Advance to VR-3 maintenance'}
             </button>
           )}
         </section>
@@ -329,32 +356,26 @@ export function TrainingScreen({
 
       {state.phase === 'vr' && (
         <section aria-labelledby="vr-heading" className="vr-round">
-          <h3 id="vr-heading">VR-3 maintenance</h3>
+          <h3 id="vr-heading">
+            {mode === 'simple'
+              ? 'Vary the number of responses'
+              : 'VR-3 maintenance'}
+          </h3>
           <p>
-            Reinforcement is now due on a varying schedule -- watch for the
-            "reinforcement due" cue, then deliver right after{' '}
-            {state.creature.name} meets it.
+            Vary how many responses happen before each delivery. There is no
+            “due” cue or hidden exact count: use a changing pattern while
+            keeping the average near three responses per delivery.
           </p>
 
-          <fieldset>
-            <legend>What to deliver</legend>
-            {stimuli.map((s) => (
-              <label key={s.stimulusId}>
-                <input
-                  type="radio"
-                  name="vr-stimulus"
-                  checked={selectedStimulusId === s.stimulusId}
-                  onChange={() =>
-                    setSelectedStimulusId(s.stimulusId as StimulusId)
-                  }
-                />
-                {STIMULUS_LABELS[s.stimulusId as StimulusId]}
-              </label>
-            ))}
-          </fieldset>
+          <StimulusPicker
+            name="vr-stimulus"
+            selected={selectedStimulusId}
+            onSelect={setSelectedStimulusId}
+            hierarchy={preferenceOrder}
+          />
 
           <p role="status" className="vr-status">
-            {vrStatusText}
+            {mode === 'simple' ? simpleVrStatusText : vrStatusText}
           </p>
 
           <button type="button" className="delivery-target" onClick={deliver}>
@@ -366,83 +387,138 @@ export function TrainingScreen({
           </p>
 
           <p className="vr-progress">
-            Completed on-schedule cycles: {vrCyclesCompletedCount} of{' '}
-            {DEFAULT_SIM_CONFIG.vrCyclesToComplete} needed
+            {mode === 'simple'
+              ? 'Credited deliveries'
+              : 'Credited on-schedule deliveries'}
+            : {vrCyclesCompletedCount} of {trainingStatus.vrRequired} needed
             {vrCyclesRemaining > 0 ? ` (${vrCyclesRemaining} to go)` : ''}.
           </p>
 
-          {vrTrialHistoryList.length > 0 && (
-            <table className="vr-trial-history">
-              <caption>
-                Reinforcement history: one column per response, in order.
-                &quot;+&quot; means that response earned credited reinforcement;
-                &quot;&times;&quot; means a delivery was attempted but not
-                credited (too soon, too late, or too predictable a pattern);
-                blank means no delivery followed that response.
-              </caption>
-              <thead>
-                <tr>
-                  {vrTrialHistoryList.map((_, i) => (
-                    <th key={i} scope="col">
-                      {i + 1}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  {vrTrialHistoryList.map((trial, i) => (
-                    <td key={i}>
-                      {trial.mark === 'credited'
-                        ? '+'
-                        : trial.mark === 'blocked'
-                          ? '×'
-                          : ''}
-                      <span className="sr-only">
+          {mode === 'advanced' && vrTrialHistoryList.length > 0 && (
+            <div className="table-scroll">
+              <table className="vr-trial-history">
+                <caption>
+                  Reinforcement history: one column per response, in order.
+                  &quot;+&quot; means that response earned credited
+                  reinforcement; &quot;&times;&quot; means a delivery was
+                  attempted but not credited (too soon, too late, or too
+                  predictable a pattern); blank means no delivery followed that
+                  response.
+                </caption>
+                <thead>
+                  <tr>
+                    {vrTrialHistoryList.map((_, i) => (
+                      <th key={i} scope="col">
+                        {i + 1}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    {vrTrialHistoryList.map((trial, i) => (
+                      <td key={i}>
                         {trial.mark === 'credited'
-                          ? ' credited'
+                          ? '+'
                           : trial.mark === 'blocked'
-                            ? ' not credited'
-                            : ' no delivery'}
-                      </span>
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
+                            ? '×'
+                            : ''}
+                        <span className="sr-only">
+                          {trial.mark === 'credited'
+                            ? ' credited'
+                            : trial.mark === 'blocked'
+                              ? ' not credited'
+                              : ' no delivery'}
+                        </span>
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           )}
 
-          {vrCyclesCompletedCount >= DEFAULT_SIM_CONFIG.vrCyclesToComplete && (
-            <button
-              type="button"
-              onClick={() => void session.startRound('extinction')}
-            >
-              Advance to the optional extinction demonstration
+          {vrCyclesCompletedCount >= trainingStatus.vrRequired && (
+            <div className="round-actions">
+              <button
+                type="button"
+                onClick={() => void session.startRound('extinction')}
+              >
+                Advance to the optional extinction-effects demonstration
+              </button>
+              <button
+                type="button"
+                onClick={() => void session.finishSession()}
+              >
+                Skip demonstration and see debrief
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {state.phase === 'extinction' && (
+        <section
+          aria-labelledby="extinction-heading"
+          className="extinction-round"
+        >
+          <h3 id="extinction-heading">Observe when deliveries stop</h3>
+          <p>
+            Do not deliver an item in this optional demonstration. Just watch
+            the response pattern after a previously reinforced response no
+            longer produces the item. A temporary increase may happen, but it is
+            seeded and probabilistic—not inevitable.
+          </p>
+          <p>
+            Ordinary decreases, satiation, and a response returning later are
+            not an extinction burst. The debrief will describe only what the
+            event-derived evidence supports in this run.
+          </p>
+          {extinctionComplete ? (
+            <p role="status">Observation complete. The debrief is ready.</p>
+          ) : (
+            <p>
+              {Math.ceil(trainingStatus.extinctionRemainingMs / 1000)} simulated
+              seconds of observation remain.
+            </p>
+          )}
+          {extinctionComplete && (
+            <button type="button" onClick={() => void session.finishSession()}>
+              Finish demonstration and see debrief
             </button>
           )}
         </section>
       )}
 
-      <h3>Stimulus values</h3>
-      <table>
-        <caption className="visually-hidden">
-          Current motivating value of each stimulus, for {state.creature.name}
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">Stimulus</th>
-            <th scope="col">Current value</th>
-          </tr>
-        </thead>
-        <tbody>
-          {state.creature.stimuli.map((s) => (
-            <tr key={s.stimulusId}>
-              <th scope="row">{STIMULUS_LABELS[s.stimulusId as StimulusId]}</th>
-              <td>{Math.round(s.currentValue * 100)}%</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {mode === 'advanced' && (
+        <>
+          <h3>Stimulus values</h3>
+          <div className="table-scroll">
+            <table>
+              <caption className="visually-hidden">
+                Current motivating value of each stimulus, for{' '}
+                {state.creature.name}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Stimulus</th>
+                  <th scope="col">Current value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.creature.stimuli.map((s) => (
+                  <tr key={s.stimulusId}>
+                    <th scope="row">
+                      {STIMULUS_LABELS[s.stimulusId as StimulusId]}
+                    </th>
+                    <td>{Math.round(s.currentValue * 100)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {mode === 'advanced' && (
         <section aria-labelledby="advanced-view-heading">
@@ -453,5 +529,39 @@ export function TrainingScreen({
         </section>
       )}
     </section>
+  )
+}
+
+function StimulusPicker({
+  name,
+  selected,
+  onSelect,
+  hierarchy,
+}: {
+  name: string
+  selected: StimulusId
+  onSelect: (id: StimulusId) => void
+  hierarchy: readonly { readonly stimulusId: string; readonly rank: number }[]
+}) {
+  return (
+    <fieldset>
+      <legend>What to deliver</legend>
+      <div className="stimulus-options">
+        {hierarchy.map((row) => {
+          const id = row.stimulusId as StimulusId
+          return (
+            <label key={id}>
+              <input
+                type="radio"
+                name={name}
+                checked={selected === id}
+                onChange={() => onSelect(id)}
+              />
+              Rank {row.rank}: {STIMULUS_LABELS[id]}
+            </label>
+          )
+        })}
+      </div>
+    </fieldset>
   )
 }

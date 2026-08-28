@@ -27,7 +27,12 @@ export type SimEvent =
       speed: Speed
       configVersion: string
     }
-  | { type: 'paused'; at: number }
+  | {
+      type: 'paused'
+      at: number
+      reason?: 'user' | 'coaching'
+      round?: 'crf' | 'vr'
+    }
   | { type: 'resumed'; at: number }
   | { type: 'speed-changed'; at: number; speed: Speed }
   | { type: 'pair-presented'; at: number; leftId: string; rightId: string }

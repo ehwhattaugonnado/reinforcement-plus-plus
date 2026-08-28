@@ -254,3 +254,16 @@ export function vrCoachingDue(
   if (elapsedSimMs - window.startMs < config.vrCoachingPauseMs) return false
   return vrCyclesCompleted(events) < config.vrCyclesToComplete
 }
+
+export function vrCoachingPauseRecorded(events: readonly SimEvent[]): boolean {
+  const window = vrRoundWindow(events)
+  if (window === null) return false
+  return events.some(
+    (e) =>
+      e.type === 'paused' &&
+      e.reason === 'coaching' &&
+      e.round === 'vr' &&
+      e.at >= window.startMs &&
+      (window.endMs === null || e.at <= window.endMs),
+  )
+}

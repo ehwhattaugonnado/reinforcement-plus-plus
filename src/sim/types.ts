@@ -1,4 +1,12 @@
 import type { Phase, Round, SimEvent, Speed } from './events'
+import type { CrfMetrics, OutstandingCycle } from './crf'
+import type { VrTrialMark } from './vr'
+import type { AssessmentSummary } from './assessment'
+import type {
+  CumulativeRecordChartData,
+  ResponseRateChartData,
+} from './chart-data'
+import type { BurstDetectionResult, ReinforcerEvidenceResult } from './evidence'
 
 /**
  * Immutable snapshot of session state. Every field is derivable by folding the
@@ -102,6 +110,7 @@ export type CommandRejectionReason =
   | 'already-complete'
   | 'unknown-stimulus'
   | 'invalid-argument'
+  | 'baseline-not-complete'
   /**
    * CRF -> VR only (Milestone 4): rejected until both
    * `crfMinOnScheduleDeliveries` on-schedule deliveries and the
@@ -115,6 +124,7 @@ export type CommandRejectionReason =
    * (data-model section 6). See `vrCyclesCompleted` in `vr.ts`.
    */
   | 'vr-cycles-not-met'
+  | 'extinction-not-complete'
 
 export type CommandResult =
   | { readonly ok: true; readonly events: readonly SimEvent[] }
@@ -140,12 +150,46 @@ export type SimSession = {
   presentNextPair(): CommandResult
   recordObservedSelection(stimulusId: string | null): CommandResult
   startRound(round: Round): CommandResult
+  finishSession(): CommandResult
   deliverStimulus(stimulusId: string): CommandResult
   tick(realDtMs: number): CommandResult
   setPaused(paused: boolean): CommandResult
   setSpeed(speed: Speed): CommandResult
   getSnapshot(): SessionState
+  getTrainingStatus(): TrainingStatus
+  getDebriefSummary(): DebriefSummary
   subscribe(listener: () => void): () => void
+}
+
+export type DebriefSummary = {
+  readonly assessment: AssessmentSummary
+  readonly evidenceByStimulus: readonly ReinforcerEvidenceResult[]
+  readonly demonstratedStimulusIds: readonly string[]
+  readonly extinction: BurstDetectionResult
+  readonly totalResponses: number
+  readonly crfMetrics: CrfMetrics
+  readonly vrCredited: number
+  readonly vrRequired: number
+  readonly cumulativeRecord: CumulativeRecordChartData
+  readonly responseRates: ResponseRateChartData
+}
+
+export type TrainingStatus = {
+  readonly baselineComplete: boolean
+  readonly outstandingCycle: OutstandingCycle | null
+  readonly crfMetrics: CrfMetrics
+  readonly acquisitionMet: boolean
+  readonly crfCoachingDue: boolean
+  readonly vrCoachingDue: boolean
+  readonly vrCredited: number
+  readonly vrRequired: number
+  readonly vrRemaining: number
+  readonly vrHistory: ReadonlyArray<{
+    readonly responseId: string
+    readonly mark: VrTrialMark
+  }>
+  readonly extinctionComplete: boolean
+  readonly extinctionRemainingMs: number
 }
 
 export const ok = (events: readonly SimEvent[]): CommandResult => ({

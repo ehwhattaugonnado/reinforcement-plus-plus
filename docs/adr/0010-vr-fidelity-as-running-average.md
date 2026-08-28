@@ -36,7 +36,8 @@ reinforcement across the round, not a per-cycle exact target:
   `premature` (average would fall below 2) or `overrun` (above 4) — still
   delivered to the creature (ADR 0003: every experienced consequence still
   reaches the learning model), just not credited toward the round's six
-  required cycles.
+  required deliveries. The runtime retains the legacy field name
+  `vrCyclesToComplete`.
 - There is deliberately **no floor** requiring a minimum response count
   before the first delivery can be accepted. A learner who reinforces the
   very first response of a VR round is judged the same way as any other
@@ -58,9 +59,9 @@ reinforcement across the round, not a per-cycle exact target:
   (`deriveOutstandingCycle`) — there is no discrete "the schedule is now
   due" instant to open a cycle around under a no-floor average model, only
   a continuous judgment made at the instant of delivery. This was verified
-  safe: nothing else in the live event stream depends on VR emitting
-  `criterion-met` (extinction's withheld-criterion detection is not wired
-  to live play yet, and CRF keeps its own unchanged mechanism).
+  safe: ordinary VR play does not depend on `criterion-met`. Extinction keeps
+  separate live withheld-response criteria stamped with schedule `'VR'` to
+  anchor its detector, and CRF keeps its own unchanged mechanism.
 - Each `stimulus-delivered` event now records which schedule governed its
   classification (`schedule: 'CRF' | 'VR' | null`), stamped directly at
   commit time from the active phase, rather than derived indirectly from a
@@ -74,6 +75,10 @@ reinforcement across the round, not a per-cycle exact target:
 - A human learner can now succeed at VR-3 without knowing a hidden number:
   any response count that keeps the round's average near 3 counts, matching
   how the schedule is actually taught and practiced.
+- The guided UI exposes the response count, running average, and
+  reinforcement history. It must not instruct the learner to wait for a
+  discrete “reinforcement due” cue, because this decision defines no such
+  instant.
 - The trade-off is a fixed ratio in disguise (constant identical gaps) must
   be actively detected and excluded (`not-variable`) rather than falling
   out for free the way exact-sequence matching guaranteed it would.

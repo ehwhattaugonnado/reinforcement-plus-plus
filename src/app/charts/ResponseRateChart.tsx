@@ -50,7 +50,13 @@ export function ResponseRateChart({
     <figure className="chart response-rate-chart">
       <figcaption>{title}</figcaption>
 
-      <svg width={width} height={height} aria-hidden="true">
+      <svg
+        width="100%"
+        height="auto"
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="xMidYMid meet"
+        aria-hidden="true"
+      >
         <Group left={margin.left} top={margin.top}>
           <AxisLeft scale={yScale} label="Responses per minute" numTicks={4} />
           <AxisBottom top={innerHeight} scale={xScale} label="Round" />

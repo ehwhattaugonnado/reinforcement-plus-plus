@@ -3,6 +3,7 @@ import { SessionControls } from './components/SessionControls'
 import { useMode } from './hooks/useMode'
 import { useSimState } from './hooks/useSimState'
 import { TrainingScreen } from './screens/TrainingScreen'
+import { DebriefScreen } from './screens/DebriefScreen'
 
 const TRAINING_PHASES = new Set(['baseline', 'crf', 'vr', 'extinction'])
 
@@ -43,6 +44,8 @@ export function AppShell({ seed }: { seed?: string } = {}) {
       <main>
         {state.phase === 'assessment' ? (
           <AssessmentScreen state={state} session={session} />
+        ) : state.phase === 'debrief' ? (
+          <DebriefScreen state={state} session={session} mode={mode} />
         ) : TRAINING_PHASES.has(state.phase) ? (
           <TrainingScreen state={state} session={session} mode={mode} />
         ) : (

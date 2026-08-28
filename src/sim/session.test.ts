@@ -73,6 +73,7 @@ function tickUntilNextResponse(
     steps < guard
   ) {
     session.tick(stepMs)
+    if (session.getSnapshot().paused) session.setPaused(false)
     steps++
   }
   return steps < guard
@@ -245,6 +246,8 @@ describe('invalid commands are atomic', () => {
     expect(s.startRound('baseline')).toMatchObject({
       reason: 'duplicate-command',
     })
+    for (let i = 0; i < DEFAULT_SIM_CONFIG.baselineDurationMs / 250; i++)
+      s.tick(250)
     expect(s.startRound('crf').ok).toBe(true)
     expect(s.startRound('vr').ok).toBe(true)
     expect(s.startRound('extinction').ok).toBe(true)
@@ -254,7 +257,12 @@ describe('invalid commands are atomic', () => {
     const s = createSession({ seed: SEED })
     completeAssessment(s)
     s.startRound('baseline')
-    s.startRound('crf')
+    expect(s.startRound('crf')).toMatchObject({
+      reason: 'baseline-not-complete',
+    })
+    for (let i = 0; i < DEFAULT_SIM_CONFIG.baselineDurationMs / 250; i++)
+      s.tick(250)
+    expect(s.startRound('crf').ok).toBe(true)
     expect(s.startRound('vr')).toMatchObject({
       reason: 'acquisition-not-met',
     })
@@ -421,21 +429,23 @@ describe('free-operant response process', () => {
     // thing under test.
     const gateBypass = {
       crfMinOnScheduleDeliveries: 0,
-      crfAcquisitionRelativeIncrease: 0,
-      crfAcquisitionAbsoluteIncrease: 0,
+      crfAcquisitionRelativeIncrease: -1,
+      crfAcquisitionAbsoluteIncrease: -1000,
     }
 
     const a = createSession({ seed: 'invariant-run', config: gateBypass })
     completeAssessment(a)
     expect(a.startRound('baseline').ok).toBe(true)
-    for (let i = 0; i < 20; i++) a.tick(50)
+    for (let i = 0; i < DEFAULT_SIM_CONFIG.baselineDurationMs / 250; i++)
+      a.tick(250)
     expect(a.startRound('crf').ok).toBe(true)
     for (let i = 0; i < 20; i++) a.tick(50)
 
     const b = createSession({ seed: 'invariant-run', config: gateBypass })
     completeAssessment(b)
     expect(b.startRound('baseline').ok).toBe(true)
-    for (let i = 0; i < 20; i++) b.tick(50)
+    for (let i = 0; i < DEFAULT_SIM_CONFIG.baselineDurationMs / 250; i++)
+      b.tick(250)
     expect(b.startRound('crf').ok).toBe(true)
     expect(b.startRound('vr').ok).toBe(true)
     for (let i = 0; i < 20; i++) b.tick(50)
@@ -603,6 +613,21 @@ describe('CRF acquisition and delivery classification (Milestone 4)', () => {
         resolvedConfig,
       ),
     ).toBe(true)
+    expect(s.getSnapshot().paused).toBe(true)
+    expect(
+      s
+        .getSnapshot()
+        .events.filter((e) => e.type === 'paused' && e.reason === 'coaching'),
+    ).toEqual([
+      { type: 'paused', at: 45_500, reason: 'coaching', round: 'crf' },
+    ])
+    expect(s.setPaused(false).ok).toBe(true)
+    for (let i = 0; i < 20; i++) s.tick(50)
+    expect(
+      s
+        .getSnapshot()
+        .events.filter((e) => e.type === 'paused' && e.reason === 'coaching'),
+    ).toHaveLength(1)
     expect(s.startRound('vr')).toMatchObject({
       reason: 'acquisition-not-met',
     })
@@ -898,6 +923,61 @@ describe('VR-3 guided maintenance (Milestone 5, revised per ADR 0010)', () => {
         resolvedConfig,
       ),
     ).toBe(true)
+    expect(s.getSnapshot().paused).toBe(true)
+    expect(
+      s
+        .getSnapshot()
+        .events.filter(
+          (e) =>
+            e.type === 'paused' && e.reason === 'coaching' && e.round === 'vr',
+        ),
+    ).toHaveLength(1)
+  })
+
+  it('withholds deliveries in extinction and emits detector-visible eligibility anchors', () => {
+    const s = vrSession('extinction-live-anchor', { vrCyclesToComplete: 1 })
+    completeVrCycles(s, 1)
+    expect(s.startRound('extinction').ok).toBe(true)
+    const before = s.getSnapshot()
+    expect(s.deliverStimulus('treat')).toMatchObject({ reason: 'wrong-phase' })
+    expect(s.getSnapshot()).toBe(before)
+
+    expect(tickUntilNextResponse(s, 50)).toBe(true)
+    const events = s.getSnapshot().events
+    const response = [...events]
+      .reverse()
+      .find((e) => e.type === 'response-emitted')
+    expect(response?.type).toBe('response-emitted')
+    expect(events).toContainEqual({
+      type: 'criterion-met',
+      at: response?.at,
+      responseId:
+        response?.type === 'response-emitted' ? response.responseId : '',
+      schedule: 'VR',
+    })
+    expect(events.some((e) => e.type === 'cycle-abandoned')).toBe(false)
+  })
+
+  it('finishes from VR by skipping extinction or after its bounded duration', () => {
+    const skip = vrSession('finish-skip', { vrCyclesToComplete: 1 })
+    expect(skip.finishSession()).toMatchObject({ reason: 'vr-cycles-not-met' })
+    completeVrCycles(skip, 1)
+    expect(skip.finishSession().ok).toBe(true)
+    expect(skip.getSnapshot().phase).toBe('debrief')
+
+    const extinction = vrSession('finish-extinction', {
+      vrCyclesToComplete: 1,
+      extinctionDurationMs: 500,
+    })
+    completeVrCycles(extinction, 1)
+    expect(extinction.startRound('extinction').ok).toBe(true)
+    expect(extinction.finishSession()).toMatchObject({
+      reason: 'extinction-not-complete',
+    })
+    extinction.tick(250)
+    extinction.tick(250)
+    expect(extinction.finishSession().ok).toBe(true)
+    expect(extinction.getSnapshot().phase).toBe('debrief')
   })
 
   it('excludes premature, overrun, and not-variable deliveries from vrCyclesCompleted', () => {

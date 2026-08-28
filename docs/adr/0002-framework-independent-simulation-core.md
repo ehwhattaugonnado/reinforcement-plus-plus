@@ -9,7 +9,7 @@ The simulation's rules — schedules, the creature learning model, extinction, b
 
 ## Decision
 
-`src/sim/` is plain TypeScript with no React or DOM dependencies. It owns the controlled clock, seeded RNG, schedule policy, creature learning model, event classification, immutable snapshots, and summary derivation, and exposes a small command/snapshot-based public API: `createSession`, `presentNextPair`, `recordObservedSelection`, `startRound`, `deliverStimulus`, `tick`, `setPaused`, `setSpeed`, `getSnapshot`, `subscribe`. The React shell in `src/app/` (see [../architecture/overview.md](../architecture/overview.md)) consumes this through `useSyncExternalStore` via a `useSimState()` bridge; components render snapshots and send commands. No simulation rule lives in a hook or component.
+`src/sim/` is plain TypeScript with no React or DOM dependencies. It owns the controlled clock, seeded RNG, schedule policy, creature learning model, event classification, immutable snapshots, and summary derivation, and exposes a small command/snapshot-based public API: `createSession`, `presentNextPair`, `recordObservedSelection`, `startRound`, `finishSession`, `deliverStimulus`, `tick`, `setPaused`, `setSpeed`, `getSnapshot`, `subscribe`. The React shell in `src/app/` (see [../architecture/overview.md](../architecture/overview.md)) consumes this through `useSyncExternalStore` via a `useSimState()` bridge; components render snapshots and send commands. No simulation rule lives in a hook or component.
 
 ## Consequences
 

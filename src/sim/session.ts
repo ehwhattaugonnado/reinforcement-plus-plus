@@ -1,17 +1,38 @@
 import { chooseInPair } from './assessment'
+import { deriveAssessmentSummary } from './assessment'
+import {
+  buildCumulativeRecordChartData,
+  buildResponseRateChartData,
+} from './chart-data'
 import { resolveConfig, type SimConfig } from './config'
 import {
   classifyDelivery,
   crfAcquisitionMet,
+  crfCoachingDue,
+  crfCoachingPauseRecorded,
+  crfRoundWindow,
   deriveOutstandingCycle,
+  deriveCrfMetrics,
   type OutstandingCycle,
 } from './crf'
 import type { Phase, Round, SimEvent, Speed } from './events'
+import { detectExtinctionBurst, evaluateReinforcerEvidence } from './evidence'
 import { createInitialState } from './initial-state'
-import { RESPONDING_PHASES, meanInterarrivalMs } from './learning'
+import {
+  RESPONDING_PHASES,
+  isBaselineComplete,
+  meanInterarrivalMs,
+} from './learning'
 import { applyEvent } from './project'
 import { createRng, type Rng } from './rng'
-import { classifyVrDelivery, vrCyclesCompleted } from './vr'
+import {
+  classifyVrDelivery,
+  vrCoachingDue,
+  vrCoachingPauseRecorded,
+  vrCyclesCompleted,
+  vrRoundWindow,
+  vrTrialHistory,
+} from './vr'
 import { isStimulusId } from './stimuli'
 import {
   ok,
@@ -97,6 +118,86 @@ export function createSession(
 
     getSnapshot: () => state,
 
+    getTrainingStatus() {
+      const extinctionStart = [...state.events]
+        .reverse()
+        .find((e) => e.type === 'phase-changed' && e.phase === 'extinction')?.at
+      const extinctionElapsed =
+        extinctionStart === undefined ? 0 : state.elapsedSimMs - extinctionStart
+      const credited = vrCyclesCompleted(state.events)
+      const crfWindow = crfRoundWindow(state.events)
+      return {
+        baselineComplete: isBaselineComplete(
+          state.events,
+          state.elapsedSimMs,
+          config,
+        ),
+        outstandingCycle:
+          state.phase === 'crf'
+            ? deriveOutstandingCycle(state.events, config)
+            : null,
+        crfMetrics:
+          crfWindow === null
+            ? deriveCrfMetrics([])
+            : deriveCrfMetrics(
+                state.events,
+                crfWindow.startMs,
+                crfWindow.endMs ?? state.elapsedSimMs,
+              ),
+        acquisitionMet: crfAcquisitionMet(
+          state.events,
+          state.elapsedSimMs,
+          config,
+        ),
+        crfCoachingDue: crfCoachingDue(
+          state.events,
+          state.elapsedSimMs,
+          config,
+        ),
+        vrCoachingDue: vrCoachingDue(state.events, state.elapsedSimMs, config),
+        vrCredited: credited,
+        vrRequired: config.vrCyclesToComplete,
+        vrRemaining: Math.max(0, config.vrCyclesToComplete - credited),
+        vrHistory: vrTrialHistory(state.events),
+        extinctionComplete:
+          extinctionStart !== undefined &&
+          extinctionElapsed >= config.extinctionDurationMs,
+        extinctionRemainingMs:
+          extinctionStart === undefined
+            ? config.extinctionDurationMs
+            : Math.max(0, config.extinctionDurationMs - extinctionElapsed),
+      }
+    },
+
+    getDebriefSummary() {
+      const evidenceByStimulus = state.creature.stimuli.map((stimulus) =>
+        evaluateReinforcerEvidence(state.events, config, stimulus.stimulusId),
+      )
+      return {
+        assessment: deriveAssessmentSummary(state.events),
+        evidenceByStimulus,
+        demonstratedStimulusIds: evidenceByStimulus
+          .filter((result) => result.kind === 'evidence-met')
+          .map((result) => result.stimulusId),
+        extinction: detectExtinctionBurst(state.events, config),
+        totalResponses: state.events.filter(
+          (event) => event.type === 'response-emitted',
+        ).length,
+        crfMetrics: session.getTrainingStatus().crfMetrics,
+        vrCredited: vrCyclesCompleted(state.events),
+        vrRequired: config.vrCyclesToComplete,
+        cumulativeRecord: buildCumulativeRecordChartData(
+          state.events,
+          state.elapsedSimMs,
+        ),
+        responseRates: buildResponseRateChartData(
+          state.events,
+          undefined,
+          state.elapsedSimMs,
+        ),
+      }
+    },
+
     subscribe(listener) {
       listeners.add(listener)
       return () => listeners.delete(listener)
@@ -122,8 +223,37 @@ export function createSession(
       if (simDtMs <= 0) return ok([])
 
       const windowStart = state.elapsedSimMs
-      const windowEnd = windowStart + simDtMs
-      advanceClock(simDtMs)
+      const requestedWindowEnd = windowStart + simDtMs
+      let coachingRound: 'crf' | 'vr' | null = null
+      let coachingAtMs: number | null = null
+      if (state.phase === 'crf' && !crfCoachingPauseRecorded(state.events)) {
+        const round = crfRoundWindow(state.events)
+        const threshold =
+          (round?.startMs ?? Infinity) + config.crfCoachingPauseMs
+        if (
+          threshold <= requestedWindowEnd &&
+          !crfAcquisitionMet(state.events, threshold, config)
+        ) {
+          coachingRound = 'crf'
+          coachingAtMs = Math.max(windowStart, threshold)
+        }
+      } else if (
+        state.phase === 'vr' &&
+        !vrCoachingPauseRecorded(state.events)
+      ) {
+        const round = vrRoundWindow(state.events)
+        const threshold =
+          (round?.startMs ?? Infinity) + config.vrCoachingPauseMs
+        if (
+          threshold <= requestedWindowEnd &&
+          vrCyclesCompleted(state.events) < config.vrCyclesToComplete
+        ) {
+          coachingRound = 'vr'
+          coachingAtMs = Math.max(windowStart, threshold)
+        }
+      }
+      const windowEnd = coachingAtMs ?? requestedWindowEnd
+      advanceClock(windowEnd - windowStart)
 
       // Seeded free-operant response process: responses are drawn as an
       // interval-based hazard (exponential inter-response time), not a
@@ -175,9 +305,10 @@ export function createSession(
             // made at the instant of each delivery (see vr.ts's
             // `classifyVrDelivery`). Extinction intentionally opens none
             // either: withheld reinforcement is the whole point of the
-            // round, and any criterion-met there is constructed only by
-            // evidence.ts's detector inputs, never emitted live. At most one
-            // CRF criterion is ever outstanding at a time.
+            // round. Extinction records the response as a VR eligibility
+            // criterion whose consequence was withheld, providing the
+            // event-derived anchor used by burst detection. CRF's outstanding
+            // cycle projector deliberately ignores these VR-stamped anchors.
             const opensCrfCriterion = state.phase === 'crf'
             if (
               opensCrfCriterion &&
@@ -191,6 +322,16 @@ export function createSession(
               }
               state = applyEvent(state, criterionMetEvent, config)
               generated.push(criterionMetEvent)
+            }
+            if (state.phase === 'extinction') {
+              const withheldCriterionEvent: SimEvent = {
+                type: 'criterion-met',
+                at: event.at,
+                responseId: event.responseId,
+                schedule: 'VR',
+              }
+              state = applyEvent(state, withheldCriterionEvent, config)
+              generated.push(withheldCriterionEvent)
             }
 
             const rate = state.creature.targetBehavior.currentRatePerMinute
@@ -217,6 +358,17 @@ export function createSession(
         }
       }
 
+      if (coachingRound !== null && coachingAtMs !== null) {
+        const pauseEvent: SimEvent = {
+          type: 'paused',
+          at: coachingAtMs,
+          reason: 'coaching',
+          round: coachingRound,
+        }
+        state = applyEvent(state, pauseEvent, config)
+        generated.push(pauseEvent)
+      }
+
       for (const listener of listeners) listener()
       return ok(generated)
     },
@@ -227,7 +379,7 @@ export function createSession(
       }
       return commit([
         paused
-          ? { type: 'paused', at: state.elapsedSimMs }
+          ? { type: 'paused', at: state.elapsedSimMs, reason: 'user' }
           : { type: 'resumed', at: state.elapsedSimMs },
       ])
     },
@@ -257,6 +409,15 @@ export function createSession(
         return reject(
           'wrong-phase',
           `in ${state.phase}, need ${allowed.join('|')}`,
+        )
+      }
+      if (
+        round === 'crf' &&
+        !isBaselineComplete(state.events, state.elapsedSimMs, config)
+      ) {
+        return reject(
+          'baseline-not-complete',
+          `${config.baselineDurationMs} simulated ms of baseline are required`,
         )
       }
       if (
@@ -300,6 +461,37 @@ export function createSession(
         phase: PHASE_FOR_ROUND[round],
       })
       return commit(events)
+    },
+
+    finishSession() {
+      if (state.phase === 'vr') {
+        if (vrCyclesCompleted(state.events) < config.vrCyclesToComplete) {
+          return reject(
+            'vr-cycles-not-met',
+            `${config.vrCyclesToComplete} completed on-schedule VR cycles are required`,
+          )
+        }
+      } else if (state.phase === 'extinction') {
+        const extinctionStart = [...state.events]
+          .reverse()
+          .find(
+            (e) => e.type === 'phase-changed' && e.phase === 'extinction',
+          )?.at
+        if (
+          extinctionStart === undefined ||
+          state.elapsedSimMs - extinctionStart < config.extinctionDurationMs
+        ) {
+          return reject(
+            'extinction-not-complete',
+            `${config.extinctionDurationMs} simulated ms of extinction are required`,
+          )
+        }
+      } else {
+        return reject('wrong-phase', `in ${state.phase}`)
+      }
+      return commit([
+        { type: 'phase-changed', at: state.elapsedSimMs, phase: 'debrief' },
+      ])
     },
 
     presentNextPair() {
@@ -366,11 +558,7 @@ export function createSession(
     deliverStimulus(stimulusId) {
       if (!isStimulusId(stimulusId))
         return reject('unknown-stimulus', stimulusId)
-      if (
-        state.phase !== 'crf' &&
-        state.phase !== 'vr' &&
-        state.phase !== 'extinction'
-      ) {
+      if (state.phase !== 'crf' && state.phase !== 'vr') {
         return reject('wrong-phase', `in ${state.phase}`)
       }
 

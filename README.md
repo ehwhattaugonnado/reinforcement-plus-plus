@@ -44,16 +44,18 @@ V1 is under active development. The application currently includes:
   and the matching training screen UI;
 - event-derived reinforcer-evidence and extinction-burst rules, including a
   live seeded extinction-transition model calibrated against a 150-seed
-  cohort;
+  cohort, a timed observational extinction round, and skip/finish paths;
 - project-owned cumulative-record and response-rate chart data and accessible
   visx chart views, wired into an Advanced-mode live training view with an
-  accessible event table; and
+  accessible event table;
+- a shared event-derived debrief with Simple conclusions and Advanced charts;
+  and
 - Vitest, React Testing Library, Playwright smoke, and automated accessibility
   coverage.
 
-The complete learner path is not finished yet. The extinction round's own
-UI/timing, the shared debrief screen, and release hardening remain. See the
-[implementation roadmap](docs/roadmap.md) for the detailed status and
+The complete release candidate is not finished yet. Onboarding, the full
+debrief metric set and mode-parity coverage, and release hardening remain. See
+the [implementation roadmap](docs/roadmap.md) for the detailed status and
 sequence.
 
 ## Running it locally

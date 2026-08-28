@@ -85,7 +85,8 @@ carry, required instruction.
 - Multiple creatures, naming, or customization.
 - MSWO and single-stimulus assessment formats.
 - FI, FR values other than FR-1/CRF, and VI schedules.
-- Independent VR practice without an eligibility cue.
+- Unguided VR practice without the live response count, running average, and
+  reinforcement-history feedback used by v1's guided round.
 - Actual shaping through successive approximations.
 - Generalization, maintenance across visits, or saved progress.
 - Negative reinforcement scenarios.
@@ -127,8 +128,9 @@ Before public release:
 ## 6. Deferred Work
 
 - Standard Celeration Chart implementation.
-- Hosting/deployment target.
-- FI/FR/VI schedules, MSWO/single-stimulus assessment, shaping, independent
+- Public-release hosting approval and release process. GitHub Pages currently
+  hosts the unreviewed development preview.
+- FI/FR/VI schedules, MSWO/single-stimulus assessment, shaping, unguided
   schedule practice, multi-session persistence, and customization.
 
 ## 7. Educational References

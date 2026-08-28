@@ -5,7 +5,7 @@
 
 ## Context
 
-The v1 scope explicitly excludes generalization, maintenance across visits, or saved progress (see [../product-spec.md](../product-spec.md)). All session state is held in memory; there is no backend and no deployment target requiring one yet.
+The v1 scope explicitly excludes generalization, maintenance across visits, or saved progress (see [../product-spec.md](../product-spec.md)). All session state is held in memory and there is no backend. GitHub Pages hosts a static development preview and requires no persistence layer; public-release approval remains separate.
 
 ## Decision
 

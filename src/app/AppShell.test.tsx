@@ -29,12 +29,20 @@ describe('AppShell', () => {
 
     await user.click(screen.getByRole('radio', { name: /0\.5/ }))
     expect(sessionStatus()).toHaveTextContent(/0\.5/)
+    expect(sessionStatus()).not.toHaveTextContent(/seconds elapsed/i)
+    expect(document.querySelector('.session-elapsed')).not.toHaveAttribute(
+      'role',
+      'status',
+    )
   })
 
   it('switches presentation mode without resetting the simulation', async () => {
     const user = userEvent.setup()
     render(<AppShell seed="shell-test" />)
-    const before = sessionStatus().textContent
+    await user.click(screen.getByRole('button', { name: /show next pair/i }))
+    const observedOutcome = screen.getByText(
+      /approached:|made no selection/i,
+    ).textContent
 
     await user.click(screen.getByRole('radio', { name: /advanced/i }))
 
@@ -42,7 +50,10 @@ describe('AppShell', () => {
     expect(
       screen.getByRole('heading', { name: /preference assessment/i }),
     ).toBeInTheDocument()
-    expect(before).toBeTruthy()
+    expect(screen.getByText(observedOutcome)).toBeInTheDocument()
+    expect(
+      screen.getByText(/record this trial before the next pair/i),
+    ).toBeInTheDocument()
   })
 
   it('is operable by keyboard alone', async () => {

@@ -87,6 +87,19 @@ describe('AssessmentScreen', () => {
     expect(within(section).getByText(/trial 2 of 6/i)).toBeInTheDocument()
   })
 
+  it('pairs a decorative approach scene with the authoritative text outcome', async () => {
+    const user = userEvent.setup()
+    render(<AppShell seed="assessment-visual-test" />)
+    await user.click(screen.getByRole('button', { name: /show next pair/i }))
+
+    expect(
+      screen.getByText(/approached:|made no selection/i),
+    ).toBeInTheDocument()
+    const scene = document.querySelector('.approach-scene')
+    expect(scene).toHaveAttribute('aria-hidden', 'true')
+    expect(scene).toHaveTextContent(/Pip/)
+  })
+
   it('completes the whole six-trial assessment keyboard-only and shows an accessible hierarchy table', async () => {
     const user = userEvent.setup()
     render(<AppShell seed="assessment-keyboard-test" />)

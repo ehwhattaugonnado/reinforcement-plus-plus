@@ -22,27 +22,29 @@ export function EventLogTable({
   return (
     <section aria-labelledby="event-log-heading">
       <h3 id="event-log-heading">{title}</h3>
-      <table>
-        <caption>Raw session events, in the order they were recorded</caption>
-        <thead>
-          <tr>
-            <th scope="col">#</th>
-            <th scope="col">Time</th>
-            <th scope="col">Event</th>
-            <th scope="col">Details</th>
-          </tr>
-        </thead>
-        <tbody>
-          {events.map((event, i) => (
-            <tr key={i}>
-              <th scope="row">{i + 1}</th>
-              <td>{formatSimTime(event.at)}</td>
-              <td>{event.type}</td>
-              <td>{eventDetails(event)}</td>
+      <div className="table-scroll">
+        <table>
+          <caption>Raw session events, in the order they were recorded</caption>
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Time</th>
+              <th scope="col">Event</th>
+              <th scope="col">Details</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {events.map((event, i) => (
+              <tr key={i}>
+                <th scope="row">{i + 1}</th>
+                <td>{formatSimTime(event.at)}</td>
+                <td>{event.type}</td>
+                <td>{eventDetails(event)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {events.length === 0 && <p>No events recorded yet.</p>}
     </section>
   )

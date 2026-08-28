@@ -69,6 +69,8 @@ export type SimConfig = {
   vrPatternRepeatThreshold: number
   vrCyclesToComplete: number
   vrCoachingPauseMs: number
+  /** Duration of the optional, observational extinction round. */
+  extinctionDurationMs: number
 
   reinforcerEvidenceMinDeliveries: number
   reinforcerEvidenceWindowMs: number
@@ -248,6 +250,7 @@ export const DEFAULT_SIM_CONFIG: SimConfig = {
   vrPatternRepeatThreshold: 3,
   vrCyclesToComplete: 6,
   vrCoachingPauseMs: 240000,
+  extinctionDurationMs: 150000,
 
   reinforcerEvidenceMinDeliveries: 6,
   reinforcerEvidenceWindowMs: 60000,
@@ -289,7 +292,7 @@ export const DEFAULT_SIM_CONFIG: SimConfig = {
  *
  * See ADR 0009.
  */
-export const CONFIG_VERSION = 'v1.4.0'
+export const CONFIG_VERSION = 'v1.5.0'
 
 /** Marks a log produced under a test override so it can never replay as default. */
 export const OVERRIDE_CONFIG_VERSION = `${CONFIG_VERSION}+override`

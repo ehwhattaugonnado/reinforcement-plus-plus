@@ -58,6 +58,18 @@ describe('deriveOutstandingCycle', () => {
     expect(deriveOutstandingCycle([response(0, 'r1')], config)).toBeNull()
   })
 
+  it('ignores VR-stamped withheld criteria used by extinction detection', () => {
+    expect(
+      deriveOutstandingCycle(
+        [
+          response(100, 'r1'),
+          { type: 'criterion-met', at: 100, responseId: 'r1', schedule: 'VR' },
+        ],
+        config,
+      ),
+    ).toBeNull()
+  })
+
   it('opens on criterion-met and reports the due-by instant', () => {
     const events = [response(0, 'r1'), criterionMet(0, 'r1')]
     const cycle = deriveOutstandingCycle(events, config)
@@ -107,6 +119,34 @@ describe('deriveOutstandingCycle', () => {
       metAtMs: 0,
       dueByMs: config.reinforcementDueWindowMs,
     })
+  })
+})
+
+describe('CRF metric schedule attribution', () => {
+  it('does not absorb a VR delivery sharing the CRF round boundary timestamp', () => {
+    const events: SimEvent[] = [
+      phaseChanged(0, 'crf'),
+      response(100, 'crf-r'),
+      criterionMet(100, 'crf-r'),
+      delivered(100, {
+        responseId: 'crf-r',
+        contingency: 'response-contingent',
+        timing: 'prompt',
+        latencyMs: 0,
+        scheduleFidelity: 'on-schedule',
+      }),
+      phaseChanged(200, 'vr'),
+      delivered(200, {
+        responseId: 'vr-r',
+        contingency: 'response-contingent',
+        timing: 'prompt',
+        latencyMs: 0,
+        scheduleFidelity: 'on-schedule',
+        schedule: 'VR',
+      }),
+    ]
+    expect(deriveCrfMetrics(events, 0, 200).deliveries).toBe(1)
+    expect(deriveCrfMetrics(events, 0, 200).onScheduleDeliveries).toBe(1)
   })
 })
 

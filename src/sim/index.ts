@@ -90,10 +90,12 @@ export type {
   CommandRejectionReason,
   CommandResult,
   CreatureState,
+  DebriefSummary,
   ReplayResult,
   SchedulePlan,
   SessionState,
   SimSession,
+  TrainingStatus,
 } from './types'
 export {
   detectExtinctionBurst,

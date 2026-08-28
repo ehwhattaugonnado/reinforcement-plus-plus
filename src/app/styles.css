@@ -46,6 +46,81 @@ body {
   align-items: center;
 }
 
+.chart svg {
+  display: block;
+  max-width: 100%;
+}
+
+.chart details {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.35rem 0.55rem;
+  text-align: left;
+}
+
+.stimulus-options {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.approach-scene {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.75rem;
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+}
+
+.approach-creature {
+  font-weight: 700;
+}
+
+.approach-item {
+  padding: 0.35rem 0.55rem;
+  border: 2px solid transparent;
+  border-radius: 0.35rem;
+}
+
+.approach-item.selected {
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
+.no-approach {
+  font-style: italic;
+}
+
+@media (max-width: 36rem) {
+  .app-shell {
+    padding: 1rem;
+  }
+
+  .session-controls {
+    align-items: stretch;
+  }
+
+  .delivery-target {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
 /* Delivery and other primary controls need a large target on touch. */
 button {
   min-height: 2.75rem;
