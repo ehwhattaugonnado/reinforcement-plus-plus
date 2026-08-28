@@ -49,7 +49,7 @@ status is:
 | 2 — Assessment | Complete | Six seeded unique pairs, separate observed/recorded selections, hierarchy derivation, accessible UI, and tests are present. |
 | 3 — Baseline/learning | Complete | Render-frequency-independent response generation, baseline metrics, experienced-consequence learning, satiation/recovery, UI, and tests are present. |
 | 4 — CRF | Complete | `deliverStimulus` classifies contingency/timing/schedule fidelity independently via `src/sim/crf.ts`; one-outstanding-criterion cycles, due-window abandonment (one `criterion-missed`/`cycle-abandoned` pair per timeout), the acquisition gate, corrective-coaching detection, derived CRF metrics, and the CRF portion of `TrainingScreen` (delivery target, keyboard shortcut, status announcements) are present and tested. |
-| 5 — VR-3 | Complete | Seeded, indexed VR ratio-requirement sequence (`vrRequirementAt`, pure `(seed, index, config)`, reuses `crf.ts`'s schedule-agnostic cycle machinery); live `deriveVrScheduleState` derives `currentRequirement`/`responsesSinceReinforcement`/`generatedRequirements` from the log with no incrementally patched snapshot state; `vrCyclesCompleted` requires both an on-schedule delivery's opening `criterion-met.schedule === 'VR'` and that it falls inside `vrRoundWindow` (schedule alone is ambiguous once extinction's withheld criteria reuse `schedule: 'VR'`; window alone is ambiguous at a same-instant round boundary); the `vr-cycles-not-met` round-order gate, coaching-due detection, and the VR portion of `TrainingScreen` are present and tested. |
+| 5 — VR-3 | In revision | The original exact-seeded-per-cycle design shipped but proved unplayable by a live human tester: nothing communicates a hidden per-cycle target, so a correct delivery could be rejected. Replaced per [ADR 0010](adr/0010-vr-fidelity-as-running-average.md) with a session-wide running-average tolerance (seeded phantom prior, no floor) plus a fixed-ratio-in-disguise (`not-variable`) check and a trial-by-trial reinforcement-history view. Implementation of the revised design is in progress; see the "Recommended Next Implementation Increment" section below. |
 | 6 — Extinction/evidence | Complete (behavior model + detector); UI remains | Event-derived reinforcer-evidence and burst-detection rules are tested, including asymmetric sample-count floors and a calibrated 90s detection window; `learning.ts` has a real seeded extinction-transition burst term (`extinctionBurstPrimed`/`extinctionBurstMagnitudeScale`, seeded once per creature) with documented known burst/no-burst/indeterminate seeds (`extinction-transition.test.ts`). Live outcomes are now a healthy mix of all three verdicts rather than dominated by any one — see the "Extinction-transition state" risk checkpoint below for measured rates. The extinction-round UI/screen wiring is separate, Milestone 7/8 work. |
 | 7 — Debrief/charts | Partial | Shared chart-data projectors and accessible visx chart views are tested and wired into Advanced-mode `TrainingScreen` (live cumulative-record/response-rate charts plus an accessible event table, both passing `elapsedSimMs` explicitly to avoid understating an idle open round); the mode-neutral session summary and debrief screen remain. |
 | 8 — Release hardening | Not started | Playwright currently covers shell smoke, controls, keyboard operation, and an automated axe pass, not the complete learner journey. |
@@ -192,26 +192,34 @@ Exit gate:
 
 ### Milestone 5 — Guided VR-3 maintenance
 
-**Outcome:** The learner progresses from acquisition to six completed guided
-VR cycles and can compare the intended VR-3 policy with actual delivery.
+**Outcome:** The learner progresses from acquisition to six completed
+credited VR reinforcements, judged against a session-wide average rather
+than a hidden per-cycle target, and can see their own reinforcement history.
 
-Deliverables:
+Deliverables (revised per [ADR 0010](adr/0010-vr-fidelity-as-running-average.md)):
 
-- Implement deterministic shuffled `[2, 3, 4]` requirement blocks with a mean
-  of three, response counting, eligibility cues, and cycle reset semantics.
-- Handle premature delivery, late delivery, overruns, missed criteria,
-  abandoned cycles, incomplete end-of-round cycles, and the configured
-  coaching pause.
-- End the round only after six completed on-schedule cycles.
+- Judge each delivery by the running average of responses-per-delivery it
+  would produce (seeded with a small phantom prior, no minimum-response
+  floor), accepting `[vrAcceptableRatioMin, vrAcceptableRatioMax]`.
+- Detect and exclude a fixed ratio in disguise: `vrPatternRepeatThreshold`
+  identical real accepted gaps in a row classify as `not-variable` rather
+  than `on-schedule`.
+- Stamp `schedule: 'CRF' | 'VR' | null` directly on `stimulus-delivered` at
+  commit time, replacing the old criterion-met/round-window attribution.
+- Add a trial-by-trial reinforcement-history view: `+` for a credited
+  (`on-schedule`) delivery, a distinct mark for an attempted-but-not-credited
+  one, blank for no attempt.
+- End the round only after six credited (`on-schedule`) deliveries.
 - Extend the same TrainingScreen, event projectors, coaching language, and
   accessible status announcements rather than creating parallel VR state.
 
 Exit gate:
 
-- Tests prove bounded seeded VR sequences, cycle semantics, incomplete-cycle
-  exclusion, one-count-per-timeout fidelity, and that schedule selection alone
-  never changes creature behavior. The required assessment-to-VR path passes
-  an integration test.
+- Tests prove the running-average acceptance boundary, the no-floor
+  first-response case, the `not-variable` pattern check (including that the
+  phantom seed alone can never trigger it), the history view's derivation,
+  and that schedule selection alone never changes creature behavior. The
+  required assessment-to-VR path passes an integration test.
 
 ### Milestone 6 — Optional extinction effects and evidence rules
 
@@ -341,16 +349,32 @@ A milestone is complete only when:
 
 ## 7. Recommended Next Implementation Increment
 
-Milestone 5 (VR-3 guided maintenance) is complete: `src/sim/vr.ts` provides
-the seeded requirement sequence, live schedule-state derivation, the
-`vr-cycles-not-met` round-order gate, and coaching-due detection, reusing
-Milestone 4's schedule-agnostic cycle machinery unchanged; `TrainingScreen`
-has the matching VR UI; the full path is covered by `vr.test.ts`,
-`session.test.ts`, and `TrainingScreen.test.tsx`.
+Milestone 5 (VR-3 guided maintenance) shipped an exact-seeded-per-cycle
+design that a live human tester found unplayable: nothing communicates the
+hidden per-cycle target, so a genuinely correct delivery could be rejected.
+[ADR 0010](adr/0010-vr-fidelity-as-running-average.md) replaces it with a
+session-wide running-average tolerance. Implement that revision next, before
+starting Milestone 7:
 
-Implement Milestone 7's shared, mode-neutral debrief/session-summary screen
-next — Milestone 6's extinction-round UI/timing and Milestone 8's release
-hardening both build on it:
+1. rewrite `src/sim/vr.ts`: drop `vrRequirementAt`/the seeded shuffle and
+   the criterion-met/outstanding-cycle machinery VR borrowed from CRF; add
+   the running-average acceptance test (seeded phantom prior, no floor) and
+   the `not-variable` repeated-gap check,
+2. add `schedule: 'CRF' | 'VR' | null` to `stimulus-delivered` and stamp it
+   at commit time in `session.ts`, replacing the criterion-met/round-window
+   attribution `vrCyclesCompleted` used before,
+3. update `SchedulePlan`'s VR variant and `TrainingScreen`'s VR status text
+   and progress display for the new shape,
+4. add the trial-by-trial reinforcement-history view (`+` credited, a
+   distinct mark for attempted-but-not-credited, blank for no attempt), and
+5. verify the acceptance boundary, the no-floor first-response case, the
+   `not-variable` check (including that the phantom seed alone can never
+   trigger it), the history view, and that schedule selection alone never
+   changes creature behavior, plus an assessment-to-VR integration test.
+
+Milestone 7's shared, mode-neutral debrief/session-summary screen remains
+the increment after that — Milestone 6's extinction-round UI/timing and
+Milestone 8's release hardening both build on it:
 
 1. derive the session summary purely from the event log (reusing the
    Milestone 7 chart-data projectors already wired into Advanced-mode

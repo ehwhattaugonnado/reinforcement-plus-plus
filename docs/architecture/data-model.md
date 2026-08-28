@@ -56,14 +56,25 @@ type SchedulePlan =
   | {
       type: 'VR'
       meanRatio: 3
-      currentRequirement: number
       responsesSinceReinforcement: number
-      generatedRequirements: number[]
+      acceptedGaps: readonly number[]
+      runningAverage: number
     }
 ```
 
 The v1 runtime types contain only CRF and VR. Future schedule types should not
 appear in active unions until their rules are implemented.
+
+VR's fidelity model does not use a per-cycle exact target (see
+[ADR 0010](../adr/0010-vr-fidelity-as-running-average.md)): `acceptedGaps`
+is the real history of credited (`on-schedule`) response counts this round,
+and `runningAverage` is computed over that history plus a small seeded
+phantom prior (`vrAverageSeedCount` entries of `vrAverageSeedValue`), so
+early deliveries aren't judged off a near-empty sample. Unlike CRF, VR has
+no single-outstanding-cycle machinery and does not emit `criterion-met` or
+`criterion-missed` — there is no discrete "the schedule is now due" instant
+under a no-floor average model, only a continuous judgment made at the
+instant of each delivery.
 
 ## 3. Event log
 
@@ -92,7 +103,13 @@ type SimEvent =
       latencyMs: number | null
       contingency: 'response-contingent' | 'noncontingent'
       timing: 'prompt' | 'delayed' | 'no-response'
-      scheduleFidelity: 'on-schedule' | 'premature' | 'overrun' | 'not-applicable'
+      scheduleFidelity:
+        | 'on-schedule'
+        | 'premature'
+        | 'overrun'
+        | 'not-variable'
+        | 'not-applicable'
+      schedule: 'CRF' | 'VR' | null
     }
   | { type: 'criterion-missed'; at: number; responseId: string }
   | { type: 'cycle-abandoned'; at: number; reason: 'due-window-elapsed' | 'round-ended' }
@@ -114,6 +131,19 @@ brief, equal post-selection access and its bounded satiation effect are a pure
 function of that event and `SimConfig`, so the projector folds them from
 `creature-selected` alone; replay never re-runs the choice model or draws
 randomness.
+
+`stimulus-delivered.schedule` records which schedule governed this
+delivery's classification (`null` for a noncontingent delivery, or any
+delivery outside a scheduled round), stamped directly from the active phase
+at commit time. It replaces deriving that attribution indirectly from a
+paired `criterion-met` event or a round time window, which is fragile at a
+round-boundary instant (two events can share the exact same simulated `at`).
+Live VR play does not currently emit `criterion-met`/`criterion-missed`
+(see [ADR 0010](../adr/0010-vr-fidelity-as-running-average.md)); those
+types still carry `schedule: 'CRF' | 'VR'` because CRF continues to use
+them, and a future extinction-round design may reuse the `'VR'` literal for
+synthesized withheld-criterion events (undecided, Milestone 6 UI/timing is
+not yet built).
 
 An active response has a default prompt-delivery window of 1,500 simulated
 milliseconds (`promptDeliveryWindowMs`). The window is fixed in simulated time
@@ -249,7 +279,7 @@ second mutable data path:
   deliveries.
 - **Prompt-delivery rate:** prompt deliveries divided by all
   response-contingent deliveries.
-- **Schedule fidelity:** correctly completed schedule cycles divided by all
+- **CRF schedule fidelity:** correctly completed cycles divided by all
   completed or abandoned cycles. A correct cycle has no premature or
   noncontingent delivery and is completed promptly after the first response
   that meets its criterion. A cycle is *completed* when a delivery ends it. A
@@ -262,6 +292,15 @@ second mutable data path:
   met when the round ended is *incomplete* and is excluded from both numerator
   and denominator, so ending a round mid-ratio neither rewards nor penalizes
   the learner.
+- **VR schedule fidelity:** `on-schedule` deliveries divided by
+  `vrCyclesToComplete`, per [ADR 0010](../adr/0010-vr-fidelity-as-running-average.md).
+  VR has no cycles, criteria, or due window to complete or abandon — each
+  delivery is judged independently against the round's running average of
+  responses-per-delivery (seeded with a small phantom prior) and, separately,
+  against whether it repeats the same gap too many times in a row
+  (`not-variable`). `premature`, `overrun`, and `not-variable` deliveries are
+  still part of the creature's experienced reinforcement history (ADR 0003);
+  they are simply not credited toward the round's required cycles.
 - **Response rate by phase/window:** response events divided by observed
   simulated time, excluding pauses.
 
@@ -327,7 +366,11 @@ stamped into `session-started`.
 | `crfAcquisitionWindowMs` | 30000 simulated ms | Round 1 advance gate |
 | `crfCoachingPauseMs` | 180000 simulated ms | Round 1 coaching pause |
 | `vrMeanRatio` | 3 | Schedule policy |
-| `vrRequirementBlock` | [2, 3, 4] | Schedule policy |
+| `vrAcceptableRatioMin` | 2 | VR fidelity: lower bound of the accepted running average |
+| `vrAcceptableRatioMax` | 4 | VR fidelity: upper bound of the accepted running average |
+| `vrAverageSeedValue` | 3 | VR fidelity: value of each phantom prior entry |
+| `vrAverageSeedCount` | 3 | VR fidelity: number of phantom prior entries |
+| `vrPatternRepeatThreshold` | 3 | VR fidelity: consecutive identical real gaps that trigger `not-variable` |
 | `vrCyclesToComplete` | 6 | Round 2 completion |
 | `vrCoachingPauseMs` | 240000 simulated ms | Round 2 coaching pause |
 | `reinforcerEvidenceMinDeliveries` | 6 | Reinforcer-evidence rule |

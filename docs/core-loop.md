@@ -71,29 +71,31 @@ be interpreted; it is not scored as player performance. Its duration is
 ### Round 2: VR maintenance
 
 - After acquisition, the schedule is thinned to VR-3.
-- The seeded schedule policy generates a bounded sequence of ratio
-  requirements with a mean of three (v1 default: shuffled blocks of 2, 3, and
-  4). It tracks responses since the previous on-schedule delivery.
-- During guided v1 play, the UI shows the response count and signals when the
-  current criterion is met. The player must still deliver the stimulus
-  manually and promptly. Premature, late, missed, and noncontingent deliveries
-  remain possible and are logged.
-- Once a ratio requirement is met, reinforcement remains due until it is
-  delivered or until the due window (`reinforcementDueWindowMs`) elapses.
-  Additional responses while reinforcement is due are logged as schedule
-  overruns. If the due window elapses undelivered, the sim emits
-  `criterion-missed`, abandons the cycle, and starts a new one at the next
-  response; this is the only way a criterion is missed rather than merely
-  delivered late. Any delivery starts a new ratio cycle; a premature delivery
-  is therefore both a fidelity error and part of the actual reinforcement
-  history experienced by the creature.
-- The schedule policy determines when reinforcement is due; it does not
-  directly make the creature respond faster. Behavior changes only through
-  the reinforcement contingencies the creature actually experiences. See
-  [ADR 0003](adr/0003-eligibility-vs-experienced-consequences-invariant.md).
-- The round ends after `vrCyclesToComplete` completed on-schedule VR cycles.
-  At `vrCoachingPauseMs`, it pauses and offers corrective coaching if that
-  criterion has not been reached.
+- Fidelity is judged against a running average of responses-per-delivery
+  across the whole round, not a hidden exact target per cycle — see
+  [ADR 0010](adr/0010-vr-fidelity-as-running-average.md). The average is
+  seeded with a small phantom history (three entries of 3) so early
+  deliveries aren't judged off a near-empty sample, then tracks only real
+  accepted deliveries from there. There is no minimum-response floor: the
+  very first response of the round is judged the same way as any other, by
+  whether accepting it would keep the average in range.
+- On each delivery, the sim computes what the round's average would become
+  if this gap (responses since the last delivery) were accepted. In range
+  (2-4) it's `on-schedule` and joins the average; below range it's
+  `premature`, above it's `overrun` — either way it is still delivered to
+  the creature and is part of the actual reinforcement history experienced
+  (ADR 0003), it just is not credited toward the round's required cycles.
+- A delivery that averages correctly but repeats the same gap too many
+  times in a row (default: three identical real gaps) is `not-variable`
+  instead of `on-schedule` — still delivered, still not credited. This
+  catches a fixed ratio dressed up as VR (e.g. always reinforcing every
+  third response).
+- The UI shows the live response count, the running average, and a
+  trial-by-trial history of which responses earned credited reinforcement.
+  The player must still deliver the stimulus manually and promptly.
+- The round ends after `vrCyclesToComplete` completed (`on-schedule`)
+  cycles. At `vrCoachingPauseMs`, it pauses and offers corrective coaching
+  if that criterion has not been reached.
 
 This progression teaches CRF as an acquisition schedule and VR as a
 maintenance schedule. An independent practice variant that hides the
