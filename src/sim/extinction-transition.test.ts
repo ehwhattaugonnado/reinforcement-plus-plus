@@ -109,6 +109,7 @@ function driveResponses(
         contingency: 'response-contingent',
         timing: 'prompt',
         scheduleFidelity: 'on-schedule',
+        schedule: 'VR',
       }
       state = applyEvent(state, deliveryEvent, config)
       events.push(deliveryEvent)

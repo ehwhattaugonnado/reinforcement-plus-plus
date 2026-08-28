@@ -29,6 +29,7 @@ function delivery(
     contingency: 'response-contingent',
     timing: 'prompt',
     scheduleFidelity: 'on-schedule',
+    schedule: null,
     ...overrides,
   }
 }
@@ -604,9 +605,9 @@ describe('the central causal invariant', () => {
       schedulePlan: {
         type: 'VR',
         meanRatio: 3,
-        currentRequirement: 4,
         responsesSinceReinforcement: 2,
-        generatedRequirements: [2, 3, 4],
+        acceptedGaps: [2, 3, 4],
+        runningAverage: 3,
       },
     }
 

@@ -74,6 +74,7 @@ function buildRealisticLog(): SimEvent[] {
       contingency: 'response-contingent',
       timing: 'prompt',
       scheduleFidelity: 'on-schedule',
+      schedule: 'CRF',
     })
   }
   const crfEndMs = crfStartMs + 5000 + deliveryCount * spacingMs

@@ -49,6 +49,7 @@ export const ZERO_RESPONSE_ROUND_LOG: readonly SimEvent[] = [
     contingency: 'response-contingent',
     timing: 'prompt',
     scheduleFidelity: 'on-schedule',
+    schedule: 'CRF',
   },
   { type: 'phase-changed', at: 90000, phase: 'debrief' },
 ]
@@ -109,6 +110,7 @@ export const FULL_SESSION_LOG: readonly SimEvent[] = [
     contingency: 'response-contingent',
     timing: 'prompt',
     scheduleFidelity: 'on-schedule',
+    schedule: 'CRF',
   },
   { type: 'response-emitted', at: 62000, responseId: 'c2' },
   {
@@ -120,6 +122,7 @@ export const FULL_SESSION_LOG: readonly SimEvent[] = [
     contingency: 'response-contingent',
     timing: 'delayed',
     scheduleFidelity: 'overrun',
+    schedule: 'CRF',
   },
   { type: 'response-emitted', at: 78000, responseId: 'c3' },
   { type: 'response-emitted', at: 79500, responseId: 'c4' },
@@ -132,6 +135,7 @@ export const FULL_SESSION_LOG: readonly SimEvent[] = [
     contingency: 'noncontingent',
     timing: 'no-response',
     scheduleFidelity: 'not-applicable',
+    schedule: 'CRF',
   },
 
   { type: 'phase-changed', at: 107000, phase: 'vr' },
@@ -146,6 +150,7 @@ export const FULL_SESSION_LOG: readonly SimEvent[] = [
     contingency: 'response-contingent',
     timing: 'prompt',
     scheduleFidelity: 'premature',
+    schedule: 'VR',
   },
   { type: 'response-emitted', at: 130000, responseId: 'v3' },
   { type: 'response-emitted', at: 131000, responseId: 'v4' },
@@ -159,6 +164,7 @@ export const FULL_SESSION_LOG: readonly SimEvent[] = [
     contingency: 'response-contingent',
     timing: 'prompt',
     scheduleFidelity: 'on-schedule',
+    schedule: 'VR',
   },
 
   { type: 'phase-changed', at: 167000, phase: 'extinction' },

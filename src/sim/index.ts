@@ -39,12 +39,14 @@ export {
   type OutstandingCycle,
 } from './crf'
 export {
+  classifyVrDelivery,
   deriveVrScheduleState,
   vrCoachingDue,
   vrCyclesCompleted,
-  vrRequirementAt,
   vrRoundWindow,
+  vrTrialHistory,
   type VrScheduleState,
+  type VrTrialMark,
 } from './vr'
 export {
   buildCumulativeRecordChartData,

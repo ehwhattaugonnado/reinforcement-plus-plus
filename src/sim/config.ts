@@ -42,7 +42,31 @@ export type SimConfig = {
   crfCoachingPauseMs: number
 
   vrMeanRatio: number
-  vrRequirementBlock: readonly number[]
+  /**
+   * Lower/upper bounds on the accepted running average of
+   * responses-per-delivery for a VR delivery to be credited `on-schedule`
+   * (ADR 0010). Not a per-cycle exact target: there is no hidden number a
+   * live delivery must hit, only whether accepting this gap would keep the
+   * round's average in range.
+   */
+  vrAcceptableRatioMin: number
+  vrAcceptableRatioMax: number
+  /**
+   * Each of `vrAverageSeedCount` phantom prior entries counts as this value
+   * toward the VR running average, so the first few real deliveries are
+   * judged against a reasonable prior instead of wild swings from a
+   * near-empty sample (ADR 0010).
+   */
+  vrAverageSeedValue: number
+  vrAverageSeedCount: number
+  /**
+   * Consecutive identical *real* accepted gaps (the phantom seed is
+   * excluded and can never itself trigger this) that classify the next
+   * matching delivery `not-variable` instead of `on-schedule`: a schedule
+   * that averages correctly but never varies is a fixed ratio in disguise,
+   * not VR (ADR 0010).
+   */
+  vrPatternRepeatThreshold: number
   vrCyclesToComplete: number
   vrCoachingPauseMs: number
 
@@ -217,7 +241,11 @@ export const DEFAULT_SIM_CONFIG: SimConfig = {
   crfCoachingPauseMs: 180000,
 
   vrMeanRatio: 3,
-  vrRequirementBlock: [2, 3, 4],
+  vrAcceptableRatioMin: 2,
+  vrAcceptableRatioMax: 4,
+  vrAverageSeedValue: 3,
+  vrAverageSeedCount: 3,
+  vrPatternRepeatThreshold: 3,
   vrCyclesToComplete: 6,
   vrCoachingPauseMs: 240000,
 
@@ -261,7 +289,7 @@ export const DEFAULT_SIM_CONFIG: SimConfig = {
  *
  * See ADR 0009.
  */
-export const CONFIG_VERSION = 'v1.3.0'
+export const CONFIG_VERSION = 'v1.4.0'
 
 /** Marks a log produced under a test override so it can never replay as default. */
 export const OVERRIDE_CONFIG_VERSION = `${CONFIG_VERSION}+override`

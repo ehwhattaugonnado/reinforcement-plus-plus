@@ -11,6 +11,7 @@ import {
   isBaselineComplete,
   vrCoachingDue,
   vrCyclesCompleted,
+  vrTrialHistory,
   type SessionState,
   type SimSession,
   type StimulusId,
@@ -161,13 +162,23 @@ export function TrainingScreen({
   )
   const vrCyclesRemaining =
     DEFAULT_SIM_CONFIG.vrCyclesToComplete - vrCyclesCompletedCount
+  const vrTrialHistoryList = useMemo(
+    () => vrTrialHistory(state.events),
+    [state.events],
+  )
 
+  // VR-3 has no discrete "the schedule is now due" instant (ADR 0010): every
+  // delivery is judged independently against the round's running average of
+  // responses-per-delivery, so there is nothing to wait for the way CRF's
+  // outstandingCycle is -- the status below always reflects the last
+  // delivery's outcome or the live count/average.
   const vrStatusText = (() => {
     if (vrCoachingDueFlag) {
       return (
         `Coaching: the ${DEFAULT_SIM_CONFIG.vrCyclesToComplete} on-schedule cycles have not been reached yet. ` +
-        `Watch for the "reinforcement due" cue and deliver right after ` +
-        `${state.creature.name} meets it.`
+        `${state.creature.name}'s reinforcement history is judged by a ` +
+        `running average, not a fixed count -- try delivering after a ` +
+        `varying number of responses rather than the same number every time.`
       )
     }
     if (lastDelivery !== undefined) {
@@ -183,18 +194,17 @@ export function TrainingScreen({
           ? 'on schedule'
           : lastDelivery.scheduleFidelity === 'overrun'
             ? 'after extra responses piled up (a schedule overrun)'
-            : 'before the schedule criterion was met (premature)'
+            : lastDelivery.scheduleFidelity === 'not-variable'
+              ? 'too predictable a pattern to count as variable (not credited)'
+              : 'too soon for the running average to accept (premature)'
       return `Delivered ${timingText}, ${fidelityText}.`
-    }
-    if (outstandingCycle !== null) {
-      return `Reinforcement is due -- ${state.creature.name} just met the varying-ratio criterion. Deliver now.`
     }
     const schedulePlan = state.schedulePlan
     if (schedulePlan?.type === 'VR') {
       return (
-        `${schedulePlan.responsesSinceReinforcement} of ` +
-        `${schedulePlan.currentRequirement} responses toward the next ` +
-        `reinforcement.`
+        `${schedulePlan.responsesSinceReinforcement} responses since the ` +
+        `last reinforcement. Running average: ` +
+        `${schedulePlan.runningAverage.toFixed(1)} (target 2-4).`
       )
     }
     return `Waiting for ${state.creature.name} to respond.`
@@ -360,6 +370,47 @@ export function TrainingScreen({
             {DEFAULT_SIM_CONFIG.vrCyclesToComplete} needed
             {vrCyclesRemaining > 0 ? ` (${vrCyclesRemaining} to go)` : ''}.
           </p>
+
+          {vrTrialHistoryList.length > 0 && (
+            <table className="vr-trial-history">
+              <caption>
+                Reinforcement history: one column per response, in order.
+                &quot;+&quot; means that response earned credited reinforcement;
+                &quot;&times;&quot; means a delivery was attempted but not
+                credited (too soon, too late, or too predictable a pattern);
+                blank means no delivery followed that response.
+              </caption>
+              <thead>
+                <tr>
+                  {vrTrialHistoryList.map((_, i) => (
+                    <th key={i} scope="col">
+                      {i + 1}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  {vrTrialHistoryList.map((trial, i) => (
+                    <td key={i}>
+                      {trial.mark === 'credited'
+                        ? '+'
+                        : trial.mark === 'blocked'
+                          ? '×'
+                          : ''}
+                      <span className="sr-only">
+                        {trial.mark === 'credited'
+                          ? ' credited'
+                          : trial.mark === 'blocked'
+                            ? ' not credited'
+                            : ' no delivery'}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          )}
 
           {vrCyclesCompletedCount >= DEFAULT_SIM_CONFIG.vrCyclesToComplete && (
             <button

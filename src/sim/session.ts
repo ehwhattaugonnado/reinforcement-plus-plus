@@ -11,7 +11,7 @@ import { createInitialState } from './initial-state'
 import { RESPONDING_PHASES, meanInterarrivalMs } from './learning'
 import { applyEvent } from './project'
 import { createRng, type Rng } from './rng'
-import { vrCyclesCompleted } from './vr'
+import { classifyVrDelivery, vrCyclesCompleted } from './vr'
 import { isStimulusId } from './stimuli'
 import {
   ok,
@@ -169,30 +169,25 @@ export function createSession(
             generated.push(event)
 
             // CRF: every response meets the schedule criterion (core-loop.md
-            // Round 1). VR: a criterion opens once responses since the last
-            // resolved cycle reach the current seeded ratio requirement
-            // (core-loop.md Round 2; vr.ts's `deriveVrScheduleState`, which
-            // `state.schedulePlan` was just refreshed to reflect above via
-            // `applyEvent`). Extinction intentionally opens none: withheld
-            // reinforcement is the whole point of the round, and any
-            // criterion-met there is constructed only by evidence.ts's
-            // detector inputs, never emitted live. At most one criterion is
-            // ever outstanding at a time either way.
+            // Round 1). VR no longer opens a criterion at all (ADR 0010):
+            // there is no discrete "the schedule is now due" instant under a
+            // no-floor running-average model, only a continuous judgment
+            // made at the instant of each delivery (see vr.ts's
+            // `classifyVrDelivery`). Extinction intentionally opens none
+            // either: withheld reinforcement is the whole point of the
+            // round, and any criterion-met there is constructed only by
+            // evidence.ts's detector inputs, never emitted live. At most one
+            // CRF criterion is ever outstanding at a time.
             const opensCrfCriterion = state.phase === 'crf'
-            const opensVrCriterion =
-              state.phase === 'vr' &&
-              state.schedulePlan?.type === 'VR' &&
-              state.schedulePlan.responsesSinceReinforcement >=
-                state.schedulePlan.currentRequirement
             if (
-              (opensCrfCriterion || opensVrCriterion) &&
+              opensCrfCriterion &&
               deriveOutstandingCycle(state.events, config) === null
             ) {
               const criterionMetEvent: SimEvent = {
                 type: 'criterion-met',
                 at: event.at,
                 responseId: event.responseId,
-                schedule: opensCrfCriterion ? 'CRF' : 'VR',
+                schedule: 'CRF',
               }
               state = applyEvent(state, criterionMetEvent, config)
               generated.push(criterionMetEvent)
@@ -381,12 +376,16 @@ export function createSession(
 
       // Classification happens here, on the committed path, so the
       // resulting event carries its own contingency/timing/schedule-fidelity
-      // dimensions and replay never needs to re-derive them (crf.ts).
-      const classification = classifyDelivery(
-        state.events,
-        state.elapsedSimMs,
-        config,
-      )
+      // dimensions and replay never needs to re-derive them (crf.ts, vr.ts).
+      // VR judges every delivery independently against the round's running
+      // average (ADR 0010); CRF and extinction keep the exact-match cycle
+      // classifier.
+      const classification =
+        state.phase === 'vr'
+          ? classifyVrDelivery(state.events, state.elapsedSimMs, config)
+          : classifyDelivery(state.events, state.elapsedSimMs, config)
+      const schedule =
+        state.phase === 'crf' ? 'CRF' : state.phase === 'vr' ? 'VR' : null
       return commit([
         {
           type: 'stimulus-delivered',
@@ -397,6 +396,7 @@ export function createSession(
           contingency: classification.contingency,
           timing: classification.timing,
           scheduleFidelity: classification.scheduleFidelity,
+          schedule,
         },
       ])
     },

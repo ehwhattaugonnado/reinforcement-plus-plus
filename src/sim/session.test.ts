@@ -4,12 +4,7 @@ import { crfAcquisitionMet, crfCoachingDue, deriveCrfMetrics } from './crf'
 import { isBaselineComplete } from './learning'
 import { createSession } from './session'
 import { replay } from './replay'
-import {
-  deriveVrScheduleState,
-  vrCoachingDue,
-  vrCyclesCompleted,
-  vrRequirementAt,
-} from './vr'
+import { deriveVrScheduleState, vrCoachingDue, vrCyclesCompleted } from './vr'
 import type { SimEvent } from './events'
 
 const SEED = 'test-seed-1'
@@ -60,23 +55,6 @@ function vrSession(
   }
   expect(s.startRound('vr').ok).toBe(true)
   return s
-}
-
-function criterionMetCount(s: ReturnType<typeof createSession>): number {
-  return s.getSnapshot().events.filter((e) => e.type === 'criterion-met').length
-}
-
-/** Ticks until a new criterion-met appears, or a bounded number of responses have passed (fails via assertion rather than hanging if the schedule never opens one). */
-function waitForNextCriterion(
-  s: ReturnType<typeof createSession>,
-  guardResponses = 50,
-) {
-  const before = criterionMetCount(s)
-  for (let i = 0; i < guardResponses; i++) {
-    expect(tickUntilNextResponse(s, 50)).toBe(true)
-    if (criterionMetCount(s) > before) return
-  }
-  throw new Error(`no new criterion-met after ${guardResponses} responses`)
 }
 
 /** Ticks in `stepMs` increments until at least one new response-emitted appears, or `guard` steps pass. */
@@ -757,79 +735,135 @@ describe('CRF timing invariance across speeds (Milestone 4)', () => {
   })
 })
 
-describe('VR-3 guided maintenance (Milestone 5)', () => {
-  it('sets the first seeded requirement -- not a fresh draw -- on entering VR', () => {
-    const seed = 'vr-entry-1'
-    const s = vrSession(seed)
-    const resolvedConfig = { ...DEFAULT_SIM_CONFIG, ...VR_EASY_GATE }
+describe('VR-3 guided maintenance (Milestone 5, revised per ADR 0010)', () => {
+  /**
+   * Delivers after exactly `gap` responses. A repeating [2, 4, 3] cycle
+   * (mean 3, like the seeded phantom prior) keeps every delivery's
+   * hypothetical running average in range and never repeats the same gap
+   * three times running, so it never trips the `not-variable` check either
+   * -- a reliable way to rack up on-schedule VR cycles in tests without
+   * hand-computing the running average at each step.
+   */
+  const RELIABLE_GAP_CYCLE = [2, 4, 3]
+
+  function deliverAfterGap(
+    s: ReturnType<typeof createSession>,
+    gap: number,
+  ): Extract<SimEvent, { type: 'stimulus-delivered' }> {
+    for (let i = 0; i < gap; i++) {
+      expect(tickUntilNextResponse(s, 50)).toBe(true)
+    }
+    const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
+    expect(s.deliverStimulus(stimulusId).ok).toBe(true)
+    return s.getSnapshot().events.at(-1) as Extract<
+      SimEvent,
+      { type: 'stimulus-delivered' }
+    >
+  }
+
+  /** Credits `count` on-schedule VR cycles using RELIABLE_GAP_CYCLE. */
+  function completeVrCycles(
+    s: ReturnType<typeof createSession>,
+    count: number,
+  ) {
+    for (let i = 0; i < count; i++) {
+      const delivery = deliverAfterGap(
+        s,
+        RELIABLE_GAP_CYCLE[i % RELIABLE_GAP_CYCLE.length] as number,
+      )
+      expect(delivery.scheduleFidelity).toBe('on-schedule')
+    }
+  }
+
+  it('seeds schedulePlan with the phantom-average prior and zero responses on entering VR', () => {
+    const s = vrSession('vr-entry-1')
     const schedulePlan = s.getSnapshot().schedulePlan
     expect(schedulePlan?.type).toBe('VR')
     expect(schedulePlan).toMatchObject({
-      currentRequirement: vrRequirementAt(seed, 0, resolvedConfig),
       responsesSinceReinforcement: 0,
+      acceptedGaps: [],
+      runningAverage: DEFAULT_SIM_CONFIG.vrAverageSeedValue,
     })
   })
 
-  it('does not open a criterion until the seeded ratio requirement is reached, then opens exactly one', () => {
-    const seed = 'vr-ratio-1'
-    const s = vrSession(seed)
-    const resolvedConfig = { ...DEFAULT_SIM_CONFIG, ...VR_EASY_GATE }
-    const requirement = vrRequirementAt(seed, 0, resolvedConfig)
-    const before = criterionMetCount(s)
-
-    for (let i = 0; i < requirement - 1; i++) {
-      expect(tickUntilNextResponse(s, 50)).toBe(true)
-      expect(criterionMetCount(s)).toBe(before)
-    }
-    // The requirement-th response opens exactly one new criterion.
-    expect(tickUntilNextResponse(s, 50)).toBe(true)
-    expect(criterionMetCount(s)).toBe(before + 1)
+  it('has no floor: a delivery on the very first response of the round can be accepted', () => {
+    // gap=1 against a seed of three 3's: (9+1)/4 = 2.5, in [2,4].
+    const s = vrSession('vr-no-floor-1')
+    const delivery = deliverAfterGap(s, 1)
+    expect(delivery.scheduleFidelity).toBe('on-schedule')
+    expect(vrCyclesCompleted(s.getSnapshot().events)).toBe(1)
   })
 
-  it('classifies a delivery before the ratio is met as premature, and after it as on-schedule', () => {
-    const seed = 'vr-premature-1'
-    const s = vrSession(seed)
-    const resolvedConfig = { ...DEFAULT_SIM_CONFIG, ...VR_EASY_GATE }
-    const requirement = vrRequirementAt(seed, 0, resolvedConfig)
-    expect(requirement).toBeGreaterThan(1) // vrRequirementBlock's minimum is 2
-
-    expect(tickUntilNextResponse(s, 50)).toBe(true) // one response: not enough
-    const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
-    expect(s.deliverStimulus(stimulusId).ok).toBe(true)
-    const premature = s.getSnapshot().events.at(-1) as Extract<
-      SimEvent,
-      { type: 'stimulus-delivered' }
-    >
-    expect(premature.contingency).toBe('response-contingent')
-    expect(premature.scheduleFidelity).toBe('premature')
-
-    // The premature delivery consumed response #1 (a boundary, like any
-    // response-contingent delivery), so the *same* requirement (no
-    // criterion-met has fired yet) needs a full fresh count of responses.
-    for (let i = 0; i < requirement; i++) {
-      expect(tickUntilNextResponse(s, 50)).toBe(true)
+  it('rejects a delivery whose hypothetical average would fall below the acceptable range as premature', () => {
+    // Varied low gaps (never two identical accepted gaps in a row, so the
+    // not-variable check never intervenes) gradually pull the running
+    // average down: (9+1)/4=2.5, (9+1+2)/5=2.4, (9+1+2+1)/6=2.167,
+    // (9+1+2+1+1)/7=2.0 -- each still >= 2, so all four are accepted. A
+    // fifth gap=1 pushes it to (9+1+2+1+1+1)/8=1.875, below 2 -- premature.
+    const s = vrSession('vr-premature-1')
+    for (const gap of [1, 2, 1, 1]) {
+      expect(deliverAfterGap(s, gap).scheduleFidelity).toBe('on-schedule')
     }
-    expect(s.deliverStimulus(stimulusId).ok).toBe(true)
-    const onSchedule = s.getSnapshot().events.at(-1) as Extract<
-      SimEvent,
-      { type: 'stimulus-delivered' }
-    >
-    expect(onSchedule.scheduleFidelity).toBe('on-schedule')
+    expect(deliverAfterGap(s, 1).scheduleFidelity).toBe('premature')
+  })
+
+  it('rejects a delivery whose hypothetical average would exceed the acceptable range as overrun', () => {
+    // A large gap right away drags the hypothetical average above 4:
+    // (9+20)/4 = 7.25.
+    const s = vrSession('vr-overrun-1')
+    expect(deliverAfterGap(s, 20).scheduleFidelity).toBe('overrun')
+  })
+
+  it('classifies a fixed ratio in disguise as not-variable instead of on-schedule', () => {
+    const s = vrSession('vr-pattern-1', { vrPatternRepeatThreshold: 3 })
+    // Two identical gap=3 deliveries both average to exactly 3 and are
+    // accepted (fewer than vrPatternRepeatThreshold - 1 = 2 real accepted
+    // gaps exist yet at each). A third identical gap=3 would make three
+    // identical accepted gaps in a row -- caught as not-variable instead.
+    expect(deliverAfterGap(s, 3).scheduleFidelity).toBe('on-schedule')
+    expect(deliverAfterGap(s, 3).scheduleFidelity).toBe('on-schedule')
+    const third = deliverAfterGap(s, 3)
+    expect(third.scheduleFidelity).toBe('not-variable')
+    expect(vrCyclesCompleted(s.getSnapshot().events)).toBe(2)
+  })
+
+  it("the phantom seed's three 3's alone can never trigger not-variable on early real deliveries", () => {
+    const s = vrSession('vr-pattern-seed-1')
+    // The very first two real gap=3 deliveries must not be flagged, even
+    // though the seed itself is three phantom 3's -- the pattern check only
+    // ever looks at *real* accepted gaps.
+    expect(deliverAfterGap(s, 3).scheduleFidelity).toBe('on-schedule')
+    expect(deliverAfterGap(s, 3).scheduleFidelity).toBe('on-schedule')
+  })
+
+  it('does not emit criterion-met, criterion-missed, or cycle-abandoned events for VR', () => {
+    // ADR 0010: VR has no discrete "the schedule is now due" instant, so it
+    // never uses CRF's single-outstanding-cycle/due-window machinery.
+    const s = vrSession('vr-no-criteria-1')
+    completeVrCycles(s, 3)
+    deliverAfterGap(s, 50) // an overrun attempt too, for good measure
+    for (let i = 0; i < 200; i++) s.tick(50) // well past any due window
+
+    expect(
+      s
+        .getSnapshot()
+        .events.some(
+          (e) =>
+            (e.type === 'criterion-met' && e.schedule === 'VR') ||
+            e.type === 'criterion-missed' ||
+            e.type === 'cycle-abandoned',
+        ),
+    ).toBe(false)
   })
 
   it('rejects vr -> extinction until vrCyclesToComplete on-schedule cycles are done, then allows it', () => {
-    const seed = 'vr-gate-1'
-    const s = vrSession(seed, { vrCyclesToComplete: 2 })
+    const s = vrSession('vr-gate-1', { vrCyclesToComplete: 2 })
 
     expect(s.startRound('extinction')).toMatchObject({
       reason: 'vr-cycles-not-met',
     })
 
-    for (let completed = 0; completed < 2; completed++) {
-      waitForNextCriterion(s)
-      const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
-      expect(s.deliverStimulus(stimulusId).ok).toBe(true)
-    }
+    completeVrCycles(s, 2)
 
     expect(vrCyclesCompleted(s.getSnapshot().events)).toBe(2)
     expect(s.startRound('extinction').ok).toBe(true)
@@ -837,8 +871,7 @@ describe('VR-3 guided maintenance (Milestone 5)', () => {
   })
 
   it('reports coaching as due once vrCoachingPauseMs elapses without meeting vrCyclesToComplete', () => {
-    const seed = 'vr-coach-1'
-    const s = vrSession(seed, {
+    const s = vrSession('vr-coach-1', {
       vrCoachingPauseMs: 500,
       vrCyclesToComplete: 50,
     })
@@ -867,147 +900,26 @@ describe('VR-3 guided maintenance (Milestone 5)', () => {
     ).toBe(true)
   })
 
-  describe('the one-abandoned-cycle-per-timeout invariant (session-level, VR)', () => {
-    it('an elapsed due window with no delivery contributes exactly one criterion-missed and one cycle-abandoned, and does not count toward vrCyclesCompleted', () => {
-      const seed = 'vr-timeout-1'
-      const s = vrSession(seed, { reinforcementDueWindowMs: 500 })
-      const resolvedConfig = {
-        ...DEFAULT_SIM_CONFIG,
-        ...VR_EASY_GATE,
-        reinforcementDueWindowMs: 500,
-      }
-      const requirement = vrRequirementAt(seed, 0, resolvedConfig)
-      for (let i = 0; i < requirement; i++) {
-        expect(tickUntilNextResponse(s, 25)).toBe(true)
-      }
-      const beforeCount = s.getSnapshot().events.length
-
-      for (let i = 0; i < 400; i++) s.tick(25) // 10s sim, well past the 500ms due window
-
-      const newEvents = s.getSnapshot().events.slice(beforeCount)
-      expect(
-        newEvents.filter((e) => e.type === 'criterion-missed'),
-      ).toHaveLength(1)
-      expect(
-        newEvents.filter((e) => e.type === 'cycle-abandoned'),
-      ).toHaveLength(1)
-      expect(vrCyclesCompleted(s.getSnapshot().events)).toBe(0)
-    })
-
-    it('starts a new cycle at the seeded next requirement after abandonment', () => {
-      const seed = 'vr-timeout-2'
-      const s = vrSession(seed, { reinforcementDueWindowMs: 500 })
-      const resolvedConfig = {
-        ...DEFAULT_SIM_CONFIG,
-        ...VR_EASY_GATE,
-        reinforcementDueWindowMs: 500,
-      }
-      const requirement = vrRequirementAt(seed, 0, resolvedConfig)
-      for (let i = 0; i < requirement; i++) {
-        expect(tickUntilNextResponse(s, 25)).toBe(true)
-      }
-      // Tick just past the 500ms due window, then stop as soon as the
-      // abandonment appears -- ticking further risks a further response
-      // landing before the assertion and changing
-      // responsesSinceReinforcement out from under the check below, which
-      // is about the instant right after abandonment, not some later one.
-      let abandoned = false
-      for (let i = 0; i < 40 && !abandoned; i++) {
-        s.tick(25)
-        abandoned = s
-          .getSnapshot()
-          .events.some((e) => e.type === 'cycle-abandoned')
-      }
-      expect(abandoned).toBe(true)
-
-      const schedulePlan = s.getSnapshot().schedulePlan
-      expect(schedulePlan).toMatchObject({
-        currentRequirement: vrRequirementAt(seed, 1, resolvedConfig),
-        responsesSinceReinforcement: 0,
-      })
-    })
-  })
-
-  it('abandons a cycle with reason "round-ended" (and no criterion-missed) when leaving VR with reinforcement still due', () => {
-    const seed = 'vr-round-end-1'
-    const s = vrSession(seed, {
-      vrCyclesToComplete: 1,
-      reinforcementDueWindowMs: 10_000_000,
-    })
-    // Complete one on-schedule cycle to clear the round gate.
-    {
-      waitForNextCriterion(s)
-      const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
-      expect(s.deliverStimulus(stimulusId).ok).toBe(true)
-    }
-    expect(vrCyclesCompleted(s.getSnapshot().events)).toBeGreaterThanOrEqual(1)
-
-    // Enough further responses to reach the next seeded requirement, opening
-    // a cycle that is deliberately left outstanding (a single response is
-    // not guaranteed to reach it, unlike CRF's ratio-1 case).
-    waitForNextCriterion(s)
-    const missedBefore = s
-      .getSnapshot()
-      .events.filter((e) => e.type === 'criterion-missed').length
-
+  it('excludes premature, overrun, and not-variable deliveries from vrCyclesCompleted', () => {
+    const s = vrSession('vr-incomplete-1', { vrCyclesToComplete: 0 })
+    expect(deliverAfterGap(s, 20).scheduleFidelity).toBe('overrun')
+    expect(vrCyclesCompleted(s.getSnapshot().events)).toBe(0)
     expect(s.startRound('extinction').ok).toBe(true)
-
-    const events = s.getSnapshot().events
-    const abandonments = events.filter((e) => e.type === 'cycle-abandoned')
-    expect(abandonments.at(-1)).toMatchObject({ reason: 'round-ended' })
-    expect(events.filter((e) => e.type === 'criterion-missed').length).toBe(
-      missedBefore,
-    )
   })
 
-  it('the requirement sequence observed during a real session matches the pure vrRequirementAt function', () => {
-    const seed = 'vr-sequence-1'
-    const s = vrSession(seed, { vrCyclesToComplete: 4 })
-    const resolvedConfig = {
-      ...DEFAULT_SIM_CONFIG,
-      ...VR_EASY_GATE,
-      vrCyclesToComplete: 4,
-    }
-    for (let completed = 0; completed < 4; completed++) {
-      waitForNextCriterion(s)
-      const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
-      expect(s.deliverStimulus(stimulusId).ok).toBe(true)
-    }
-    const state = deriveVrScheduleState(
+  it("the live schedulePlan's runningAverage and acceptedGaps track deriveVrScheduleState from the log", () => {
+    const s = vrSession('vr-derive-1', { vrCyclesToComplete: 3 })
+    completeVrCycles(s, 3)
+    const resolvedConfig = { ...DEFAULT_SIM_CONFIG, ...VR_EASY_GATE }
+    const derived = deriveVrScheduleState(
       s.getSnapshot().events,
-      seed,
       resolvedConfig,
     )
-    expect(state.generatedRequirements).toEqual(
-      Array.from({ length: 5 }, (_, i) =>
-        vrRequirementAt(seed, i, resolvedConfig),
-      ),
-    )
-  })
-
-  it('excludes an incomplete cycle (ratio never met) from vrCyclesCompleted when the round ends', () => {
-    const seed = 'vr-incomplete-1'
-    const s = vrSession(seed, { vrCyclesToComplete: 0 }) // gate trivially met, isolates this behavior
-    const requirement = vrRequirementAt(seed, 0, {
-      ...DEFAULT_SIM_CONFIG,
-      ...VR_EASY_GATE,
+    expect(s.getSnapshot().schedulePlan).toMatchObject({
+      acceptedGaps: derived.acceptedGaps,
+      runningAverage: derived.runningAverage,
     })
-    expect(requirement).toBeGreaterThan(1)
-
-    // One response short of the ratio: no VR criterion-met ever opens, so
-    // there is nothing to abandon either -- data-model section 5's
-    // "incomplete cycle... excluded from both numerator and denominator".
-    const vrCriterionMetBefore = criterionMetCount(s) // the 3 CRF-schedule ones from vrSession's onboarding
-    for (let i = 0; i < requirement - 1; i++) {
-      expect(tickUntilNextResponse(s, 50)).toBe(true)
-    }
-    expect(criterionMetCount(s)).toBe(vrCriterionMetBefore)
-
-    expect(s.startRound('extinction').ok).toBe(true)
-    expect(
-      s.getSnapshot().events.some((e) => e.type === 'cycle-abandoned'),
-    ).toBe(false)
-    expect(vrCyclesCompleted(s.getSnapshot().events)).toBe(0)
+    expect(derived.acceptedGaps).toEqual([2, 4, 3])
   })
 
   it('completes the required assessment -> baseline -> CRF -> VR path in one live session', () => {
@@ -1015,11 +927,7 @@ describe('VR-3 guided maintenance (Milestone 5)', () => {
     expect(s.getSnapshot().phase).toBe('vr')
     expect(s.getSnapshot().assessment.complete).toBe(true)
 
-    for (let completed = 0; completed < 2; completed++) {
-      waitForNextCriterion(s)
-      const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
-      expect(s.deliverStimulus(stimulusId).ok).toBe(true)
-    }
+    completeVrCycles(s, 2)
     expect(s.startRound('extinction').ok).toBe(true)
     expect(s.getSnapshot().phase).toBe('extinction')
 

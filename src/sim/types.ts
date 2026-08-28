@@ -85,9 +85,9 @@ export type SchedulePlan =
   | {
       readonly type: 'VR'
       readonly meanRatio: 3
-      readonly currentRequirement: number
       readonly responsesSinceReinforcement: number
-      readonly generatedRequirements: readonly number[]
+      readonly acceptedGaps: readonly number[]
+      readonly runningAverage: number
     }
 
 /**

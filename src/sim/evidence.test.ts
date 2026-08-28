@@ -53,6 +53,7 @@ function promptContingentDelivery(
     contingency: 'response-contingent',
     timing: 'prompt',
     scheduleFidelity: 'on-schedule',
+    schedule: 'CRF',
   }
 }
 

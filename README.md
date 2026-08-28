@@ -38,9 +38,10 @@ V1 is under active development. The application currently includes:
 - baseline response generation and an experienced-consequence learning model;
 - CRF delivery classification, acquisition gates, corrective coaching, and an
   accessible manual-delivery training screen;
-- guided VR-3 maintenance: a seeded ratio-requirement sequence, live
-  schedule-state derivation, the round-order completion gate, coaching, and
-  the matching training screen UI;
+- guided VR-3 maintenance: a session-wide running-average fidelity model
+  (ADR 0010) with a fixed-ratio-in-disguise check, the round-order
+  completion gate, coaching, a trial-by-trial reinforcement-history view,
+  and the matching training screen UI;
 - event-derived reinforcer-evidence and extinction-burst rules, including a
   live seeded extinction-transition model calibrated against a 150-seed
   cohort;

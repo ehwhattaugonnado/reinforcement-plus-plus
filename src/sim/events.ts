@@ -17,7 +17,7 @@ export type Speed = 0.5 | 1
 export type DeliveryContingency = 'response-contingent' | 'noncontingent'
 export type DeliveryTiming = 'prompt' | 'delayed' | 'no-response'
 export type ScheduleFidelity =
-  'on-schedule' | 'premature' | 'overrun' | 'not-applicable'
+  'on-schedule' | 'premature' | 'overrun' | 'not-variable' | 'not-applicable'
 
 export type SimEvent =
   | {
@@ -49,6 +49,12 @@ export type SimEvent =
       contingency: DeliveryContingency
       timing: DeliveryTiming
       scheduleFidelity: ScheduleFidelity
+      /**
+       * Which schedule governed this delivery's classification, stamped
+       * directly from the active phase at commit time; `null` for a
+       * noncontingent delivery or one outside a scheduled round (ADR 0010).
+       */
+      schedule: 'CRF' | 'VR' | null
     }
   | { type: 'criterion-missed'; at: number; responseId: string }
   | {

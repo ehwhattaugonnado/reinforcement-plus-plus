@@ -32,6 +32,7 @@ function delivered(
     contingency: 'noncontingent',
     timing: 'no-response',
     scheduleFidelity: 'not-applicable',
+    schedule: 'CRF',
     ...overrides,
   }
 }

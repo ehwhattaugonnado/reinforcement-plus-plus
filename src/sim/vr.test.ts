@@ -2,15 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_SIM_CONFIG } from './config'
 import type { SimEvent } from './events'
 import {
+  classifyVrDelivery,
   deriveVrScheduleState,
   vrCoachingDue,
   vrCyclesCompleted,
-  vrRequirementAt,
   vrRoundWindow,
+  vrTrialHistory,
 } from './vr'
 
 const config = DEFAULT_SIM_CONFIG
-const SEED = 'schedule-seed'
 
 function phaseChanged(
   at: number,
@@ -23,144 +23,204 @@ function response(at: number, responseId: string): SimEvent {
   return { type: 'response-emitted', at, responseId }
 }
 
-function criterionMet(at: number, responseId: string): SimEvent {
-  return { type: 'criterion-met', at, responseId, schedule: 'VR' }
-}
-
-function delivery(
+function vrDelivery(
   at: number,
-  responseId: string | null,
-  contingency: 'response-contingent' | 'noncontingent' = 'response-contingent',
+  responseId: string,
+  scheduleFidelity: 'on-schedule' | 'premature' | 'overrun' | 'not-variable',
 ): SimEvent {
   return {
     type: 'stimulus-delivered',
     at,
     stimulusId: 'treat',
     responseId,
-    latencyMs: contingency === 'response-contingent' ? 100 : null,
-    contingency,
-    timing: contingency === 'response-contingent' ? 'prompt' : 'no-response',
-    scheduleFidelity:
-      contingency === 'response-contingent' ? 'on-schedule' : 'not-applicable',
+    latencyMs: 100,
+    contingency: 'response-contingent',
+    timing: 'prompt',
+    scheduleFidelity,
+    schedule: 'VR',
   }
 }
 
-function abandoned(at: number): SimEvent {
-  return { type: 'cycle-abandoned', at, reason: 'due-window-elapsed' }
-}
-
-function onScheduleDelivery(at: number, responseId: string): SimEvent {
+function crfDelivery(at: number, responseId: string): SimEvent {
   return {
     type: 'stimulus-delivered',
     at,
     stimulusId: 'treat',
     responseId,
-    latencyMs: 100,
+    latencyMs: 50,
     contingency: 'response-contingent',
     timing: 'prompt',
     scheduleFidelity: 'on-schedule',
+    schedule: 'CRF',
   }
 }
 
-function overrunDelivery(at: number, responseId: string): SimEvent {
-  return {
-    type: 'stimulus-delivered',
-    at,
-    stimulusId: 'treat',
-    responseId,
-    latencyMs: 100,
-    contingency: 'response-contingent',
-    timing: 'prompt',
-    scheduleFidelity: 'overrun',
-  }
+/** Enters VR and responds `n` times at 1000ms intervals starting at `startMs`. */
+function respondN(startMs: number, n: number, prefix = 'r'): SimEvent[] {
+  return Array.from({ length: n }, (_, i) =>
+    response(startMs + i * 1000, `${prefix}${i}`),
+  )
 }
 
-/** One resolved VR cycle: a response, its criterion, and an on-schedule delivery. */
-function completedCycle(atMs: number, id: string): SimEvent[] {
-  return [
-    response(atMs, id),
-    criterionMet(atMs, id),
-    onScheduleDelivery(atMs + 50, id),
-  ]
-}
-
-describe('vrRequirementAt', () => {
-  it('is deterministic for a given seed and index', () => {
-    const a = vrRequirementAt('seed-1', 0, config)
-    const b = vrRequirementAt('seed-1', 0, config)
-    expect(a).toBe(b)
+describe('classifyVrDelivery', () => {
+  it('is noncontingent/not-applicable when there is no unconsumed response', () => {
+    const events: SimEvent[] = [phaseChanged(0, 'vr')]
+    const result = classifyVrDelivery(events, 500, config)
+    expect(result).toEqual({
+      responseId: null,
+      latencyMs: null,
+      contingency: 'noncontingent',
+      timing: 'no-response',
+      scheduleFidelity: 'not-applicable',
+    })
   })
 
-  it('every value is drawn from vrRequirementBlock', () => {
-    for (let i = 0; i < 30; i++) {
-      const value = vrRequirementAt('seed-1', i, config)
-      expect(config.vrRequirementBlock).toContain(value)
+  it('accepts a gap of 3 on the very first delivery of the round (seeded average stays at exactly 3)', () => {
+    // seed: three phantom 3's. Hypothetical average with a real gap of 3:
+    // (3+3+3+3)/4 = 3, in [2,4].
+    const events: SimEvent[] = [phaseChanged(0, 'vr'), ...respondN(1000, 3)]
+    const atMs = 1000 + 3 * 1000
+    const result = classifyVrDelivery(events, atMs, config)
+    expect(result.scheduleFidelity).toBe('on-schedule')
+    expect(result.contingency).toBe('response-contingent')
+  })
+
+  it('accepts a gap of 2 on the very first delivery of the round (matches the reported live bug)', () => {
+    // (3+3+3+2)/4 = 2.75, in [2,4] -- this is the exact case a live tester
+    // hit and was wrongly rejected under the old exact-per-cycle design.
+    const events: SimEvent[] = [phaseChanged(0, 'vr'), ...respondN(1000, 2)]
+    const atMs = 1000 + 2 * 1000
+    const result = classifyVrDelivery(events, atMs, config)
+    expect(result.scheduleFidelity).toBe('on-schedule')
+  })
+
+  it('has no floor: a gap of 1 is judged purely by the hypothetical average, and can be accepted', () => {
+    // (3+3+3+1)/4 = 2.5, still in [2,4] -- no special-cased minimum blocks
+    // this, unlike the rejected hard-floor design in ADR 0010.
+    const events: SimEvent[] = [phaseChanged(0, 'vr'), ...respondN(1000, 1)]
+    const atMs = 1000 + 1 * 1000
+    const result = classifyVrDelivery(events, atMs, config)
+    expect(result.scheduleFidelity).toBe('on-schedule')
+  })
+
+  it('classifies premature when the hypothetical average would fall below the minimum', () => {
+    // Construct a history where the real average is already pinned low
+    // enough that even a moderate gap keeps the hypothetical average under 2.
+    const events: SimEvent[] = [
+      phaseChanged(0, 'vr'),
+      ...respondN(1000, 1),
+      vrDelivery(2000, 'r0', 'on-schedule'), // real gap 1, on-schedule (avg (9+1)/4=2.5)
+      ...respondN(3000, 1, 's'),
+      vrDelivery(4000, 's0', 'on-schedule'), // real gap 1, avg (9+1+1)/5=2.2
+      ...respondN(5000, 1, 't'),
+    ]
+    // Candidate gap 1 again: hypothetical avg (9+1+1+1)/6 = 2.0 -- still
+    // exactly at the boundary (accepted, inclusive). Push one more identical
+    // low-gap real acceptance to drive the average under 2 for the next one.
+    const afterThird = [
+      ...events,
+      vrDelivery(5500, 't0', 'on-schedule'), // avg (9+1+1+1)/6=2.0, accepted
+      ...respondN(6000, 1, 'u'),
+    ]
+    // Now: acceptedGaps=[1,1,1], hypothetical with gap=1: (9+3)/7=1.714 < 2.
+    const result = classifyVrDelivery(afterThird, 6500, config)
+    expect(result.scheduleFidelity).toBe('premature')
+  })
+
+  it('classifies overrun when the hypothetical average would exceed the maximum', () => {
+    const events: SimEvent[] = [phaseChanged(0, 'vr'), ...respondN(1000, 20)]
+    const atMs = 1000 + 20 * 1000
+    // (9+20)/4 = 7.25, well above 4.
+    const result = classifyVrDelivery(events, atMs, config)
+    expect(result.scheduleFidelity).toBe('overrun')
+  })
+
+  it('the phantom seed alone never triggers not-variable, even when the first real gaps repeat the seed value', () => {
+    // Three real deliveries of gap 3 in a row would match the pattern
+    // threshold (3) -- but the check must only ever match against *real*
+    // accepted gaps, so the very first of these three cannot be flagged
+    // (there are zero real gaps yet to compare against).
+    const events: SimEvent[] = [phaseChanged(0, 'vr'), ...respondN(1000, 3)]
+    const atMs = 1000 + 3 * 1000
+    const result = classifyVrDelivery(events, atMs, config)
+    expect(result.scheduleFidelity).toBe('on-schedule')
+  })
+
+  it('classifies not-variable once vrPatternRepeatThreshold identical real gaps would repeat', () => {
+    let events: SimEvent[] = [phaseChanged(0, 'vr')]
+    let t = 0
+    // Two real accepted gaps of 3.
+    for (let cycle = 0; cycle < 2; cycle++) {
+      events = [...events, ...respondN(t + 1000, 3, `c${cycle}-`)]
+      t += 3000
+      events = [...events, vrDelivery(t + 500, `c${cycle}-2`, 'on-schedule')]
+      t += 500
     }
+    // A third gap of 3 would make it three-in-a-row identical.
+    events = [...events, ...respondN(t + 1000, 3, 'c2-')]
+    const atMs = t + 1000 + 3 * 1000
+    const result = classifyVrDelivery(events, atMs, config)
+    expect(result.scheduleFidelity).toBe('not-variable')
   })
 
-  it('each consecutive block of vrRequirementBlock.length indices is a permutation of vrRequirementBlock', () => {
-    const blockLength = config.vrRequirementBlock.length
-    for (let block = 0; block < 5; block++) {
-      const values = Array.from({ length: blockLength }, (_, i) =>
-        vrRequirementAt('seed-1', block * blockLength + i, config),
-      )
-      expect([...values].sort()).toEqual([...config.vrRequirementBlock].sort())
+  it('a varied gap breaks the pattern and is on-schedule even after two identical real gaps', () => {
+    let events: SimEvent[] = [phaseChanged(0, 'vr')]
+    let t = 0
+    for (let cycle = 0; cycle < 2; cycle++) {
+      events = [...events, ...respondN(t + 1000, 3, `c${cycle}-`)]
+      t += 3000
+      events = [...events, vrDelivery(t + 500, `c${cycle}-2`, 'on-schedule')]
+      t += 500
     }
+    // A gap of 4 this time -- breaks the run of identical 3's.
+    events = [...events, ...respondN(t + 1000, 4, 'c2-')]
+    const atMs = t + 1000 + 4 * 1000
+    const result = classifyVrDelivery(events, atMs, config)
+    expect(result.scheduleFidelity).toBe('on-schedule')
   })
 
-  it('different seeds produce different sequences', () => {
-    const a = Array.from({ length: 12 }, (_, i) =>
-      vrRequirementAt('seed-a', i, config),
-    )
-    const b = Array.from({ length: 12 }, (_, i) =>
-      vrRequirementAt('seed-b', i, config),
-    )
-    expect(a).not.toEqual(b)
-  })
-
-  it('different blocks within the same seed are shuffled independently, not identically', () => {
-    const blockLength = config.vrRequirementBlock.length
-    const block0 = Array.from({ length: blockLength }, (_, i) =>
-      vrRequirementAt('seed-1', i, config),
-    )
-    const block1 = Array.from({ length: blockLength }, (_, i) =>
-      vrRequirementAt('seed-1', blockLength + i, config),
-    )
-    // Not a hard guarantee (a shuffle can coincidentally repeat), but true
-    // for this seed -- regression guard against blocks all reusing one draw.
-    expect(block0).not.toEqual(block1)
-  })
-
-  it('the mean across a long run is close to the documented mean of three', () => {
-    const N = 300
-    const values = Array.from({ length: N }, (_, i) =>
-      vrRequirementAt('cohort-seed', i, config),
-    )
-    const mean = values.reduce((a, b) => a + b, 0) / N
-    expect(mean).toBeCloseTo(3, 1)
+  it('a not-variable delivery does not join the accepted-gap history (does not further entrench the repeated value)', () => {
+    let events: SimEvent[] = [phaseChanged(0, 'vr')]
+    let t = 0
+    for (let cycle = 0; cycle < 2; cycle++) {
+      events = [...events, ...respondN(t + 1000, 3, `c${cycle}-`)]
+      t += 3000
+      events = [...events, vrDelivery(t + 500, `c${cycle}-2`, 'on-schedule')]
+      t += 500
+    }
+    events = [...events, ...respondN(t + 1000, 3, 'c2-')]
+    const notVariableAtMs = t + 1000 + 3 * 1000
+    // Confirm it is indeed not-variable, then verify the state derived from
+    // a log where this delivery was recorded as not-variable still shows
+    // only two accepted gaps.
+    const classification = classifyVrDelivery(events, notVariableAtMs, config)
+    expect(classification.scheduleFidelity).toBe('not-variable')
+    const withNotVariableDelivery: SimEvent[] = [
+      ...events,
+      vrDelivery(notVariableAtMs + 10, 'c2-2', 'not-variable'),
+    ]
+    const state = deriveVrScheduleState(withNotVariableDelivery, config)
+    expect(state.acceptedGaps).toEqual([3, 3])
   })
 })
 
 describe('deriveVrScheduleState', () => {
-  it('on fresh entry into VR, the first seeded requirement is current and no responses count yet', () => {
+  it('on fresh entry into VR, no responses counted and the average is the pure seed', () => {
     const events = [phaseChanged(0, 'vr')]
-    const state = deriveVrScheduleState(events, SEED, config)
-    expect(state.currentRequirement).toBe(vrRequirementAt(SEED, 0, config))
+    const state = deriveVrScheduleState(events, config)
     expect(state.responsesSinceReinforcement).toBe(0)
-    expect(state.generatedRequirements).toEqual([
-      vrRequirementAt(SEED, 0, config),
-    ])
+    expect(state.acceptedGaps).toEqual([])
+    expect(state.runningAverage).toBe(3)
   })
 
-  it('counts responses since entering VR toward the current requirement', () => {
+  it('counts responses since entering VR toward responsesSinceReinforcement', () => {
     const events = [
       phaseChanged(0, 'vr'),
       response(1000, 'r1'),
       response(2000, 'r2'),
     ]
-    const state = deriveVrScheduleState(events, SEED, config)
+    const state = deriveVrScheduleState(events, config)
     expect(state.responsesSinceReinforcement).toBe(2)
-    expect(state.currentRequirement).toBe(vrRequirementAt(SEED, 0, config))
   })
 
   it('does not count a response from before entering VR (a prior CRF response)', () => {
@@ -170,79 +230,53 @@ describe('deriveVrScheduleState', () => {
       phaseChanged(1000, 'vr'),
       response(2000, 'r1'),
     ]
-    const state = deriveVrScheduleState(events, SEED, config)
+    const state = deriveVrScheduleState(events, config)
     expect(state.responsesSinceReinforcement).toBe(1)
   })
 
-  it('keeps the just-met requirement current, and keeps counting overrun responses, while the cycle is still open', () => {
-    // criterion-met alone does not resolve the cycle -- only a
-    // response-contingent delivery or an abandonment does (crf.ts's
-    // deriveOutstandingCycle). Until then this is the "reinforcement is
-    // due" state: the requirement that was just met stays current, and
-    // further responses accumulate as overruns rather than starting a new
-    // count -- matching what `classifyDelivery` would credit a delivery to
-    // right now.
-    const events = [
+  it('an on-schedule VR delivery resets responsesSinceReinforcement and joins acceptedGaps', () => {
+    const events: SimEvent[] = [
       phaseChanged(0, 'vr'),
-      response(1000, 'r1'),
-      response(2000, 'r2'),
-      criterionMet(2000, 'r2'),
-      response(3000, 'r3'), // overrun: piles up while reinforcement is due
+      ...respondN(1000, 3),
+      vrDelivery(4000, 'r2', 'on-schedule'),
+      response(5000, 'next'),
     ]
-    const state = deriveVrScheduleState(events, SEED, config)
-    expect(state.currentRequirement).toBe(vrRequirementAt(SEED, 0, config))
-    expect(state.generatedRequirements).toEqual([
-      vrRequirementAt(SEED, 0, config),
-    ])
-    expect(state.responsesSinceReinforcement).toBe(3)
-  })
-
-  it('an on-schedule delivery closing the cycle consumes every response up to it, including overruns', () => {
-    const events = [
-      phaseChanged(0, 'vr'),
-      response(1000, 'r1'),
-      criterionMet(1000, 'r1'),
-      response(1500, 'overrun-r'), // extra response while reinforcement is due
-      delivery(2000, 'r1'),
-      response(3000, 'r-next'),
-    ]
-    const state = deriveVrScheduleState(events, SEED, config)
-    // Only the response after the delivery counts toward the new requirement
-    // -- the overrun response was consumed by the delivery, not carried
-    // forward (crf.ts's consumption-boundary logic, reused here).
-    expect(state.responsesSinceReinforcement).toBe(1)
-    expect(state.currentRequirement).toBe(vrRequirementAt(SEED, 1, config))
-  })
-
-  it('an abandoned cycle also advances to the next requirement and discards accumulated overrun responses', () => {
-    const events = [
-      phaseChanged(0, 'vr'),
-      response(1000, 'r1'),
-      criterionMet(1000, 'r1'),
-      response(1500, 'overrun-r'),
-      abandoned(11000),
-      response(12000, 'r-next'),
-    ]
-    const state = deriveVrScheduleState(events, SEED, config)
-    expect(state.currentRequirement).toBe(vrRequirementAt(SEED, 1, config))
+    const state = deriveVrScheduleState(events, config)
+    expect(state.acceptedGaps).toEqual([3])
     expect(state.responsesSinceReinforcement).toBe(1)
   })
 
-  it('after several cycles, generatedRequirements accumulates the full seeded history in order', () => {
-    const events: SimEvent[] = [phaseChanged(0, 'vr')]
-    let t = 0
-    for (let i = 0; i < 4; i++) {
-      t += 1000
-      events.push(response(t, `r${i}`))
-      t += 100
-      events.push(criterionMet(t, `r${i}`))
-      t += 100
-      events.push(delivery(t, `r${i}`))
-    }
-    const state = deriveVrScheduleState(events, SEED, config)
-    expect(state.generatedRequirements).toEqual(
-      Array.from({ length: 5 }, (_, i) => vrRequirementAt(SEED, i, config)),
-    )
+  it('a premature or overrun VR delivery still resets responsesSinceReinforcement but does not join acceptedGaps', () => {
+    const events: SimEvent[] = [
+      phaseChanged(0, 'vr'),
+      ...respondN(1000, 5),
+      vrDelivery(6000, 'r4', 'overrun'),
+      response(7000, 'next'),
+    ]
+    const state = deriveVrScheduleState(events, config)
+    expect(state.acceptedGaps).toEqual([])
+    expect(state.responsesSinceReinforcement).toBe(1)
+  })
+
+  it('a CRF delivery never counts toward VR acceptedGaps even if it happens during the VR round window bounds', () => {
+    const events: SimEvent[] = [
+      phaseChanged(0, 'vr'),
+      ...respondN(1000, 3),
+      crfDelivery(4000, 'r2'),
+    ]
+    const state = deriveVrScheduleState(events, config)
+    expect(state.acceptedGaps).toEqual([])
+  })
+
+  it('the running average reflects real accepted gaps blended with the phantom seed', () => {
+    const events: SimEvent[] = [
+      phaseChanged(0, 'vr'),
+      ...respondN(1000, 2),
+      vrDelivery(3000, 'r1', 'on-schedule'),
+    ]
+    const state = deriveVrScheduleState(events, config)
+    // (3+3+3+2)/4 = 2.75
+    expect(state.runningAverage).toBeCloseTo(2.75, 5)
   })
 })
 
@@ -274,88 +308,99 @@ describe('vrCyclesCompleted', () => {
     expect(vrCyclesCompleted([phaseChanged(0, 'crf')])).toBe(0)
   })
 
-  it('counts only on-schedule VR deliveries within the round window', () => {
-    const events: SimEvent[] = [phaseChanged(0, 'vr')]
-    let t = 0
-    for (let i = 0; i < 3; i++) {
-      t += 1000
-      events.push(...completedCycle(t, `c${i}`))
-    }
+  it('counts on-schedule VR deliveries directly by the schedule field', () => {
+    const events: SimEvent[] = [
+      phaseChanged(0, 'vr'),
+      vrDelivery(1000, 'a', 'on-schedule'),
+      vrDelivery(2000, 'b', 'on-schedule'),
+      vrDelivery(3000, 'c', 'on-schedule'),
+    ]
     expect(vrCyclesCompleted(events)).toBe(3)
   })
 
-  it('does not count overrun or abandoned cycles', () => {
+  it('does not count premature, overrun, or not-variable VR deliveries', () => {
+    const events: SimEvent[] = [
+      phaseChanged(0, 'vr'),
+      vrDelivery(1000, 'a', 'premature'),
+      vrDelivery(2000, 'b', 'overrun'),
+      vrDelivery(3000, 'c', 'not-variable'),
+    ]
+    expect(vrCyclesCompleted(events)).toBe(0)
+  })
+
+  it('does not count an on-schedule CRF delivery', () => {
+    const events: SimEvent[] = [phaseChanged(0, 'crf'), crfDelivery(1000, 'a')]
+    expect(vrCyclesCompleted(events)).toBe(0)
+  })
+
+  it('does not count a VR-scheduled delivery classified after the VR round has ended (schedule field alone still disambiguates)', () => {
+    const events: SimEvent[] = [
+      phaseChanged(0, 'vr'),
+      vrDelivery(500, 'a', 'on-schedule'),
+      phaseChanged(1000, 'extinction'),
+      vrDelivery(1500, 'b', 'on-schedule'),
+    ]
+    // Both carry schedule: 'VR' and on-schedule -- the schedule field is
+    // stamped by the caller from the active phase, so this scenario would
+    // only occur if a caller mis-stamped an extinction-phase delivery as
+    // VR; vrCyclesCompleted trusts the field and counts both, which is
+    // correct given that contract (session.ts, not this module, is
+    // responsible for stamping it correctly).
+    expect(vrCyclesCompleted(events)).toBe(2)
+  })
+})
+
+describe('vrTrialHistory', () => {
+  it('is empty when VR was never entered', () => {
+    expect(vrTrialHistory([phaseChanged(0, 'crf')])).toEqual([])
+  })
+
+  it('marks a response credited when a matching on-schedule VR delivery exists', () => {
     const events: SimEvent[] = [
       phaseChanged(0, 'vr'),
       response(1000, 'r1'),
-      criterionMet(1000, 'r1'),
-      response(1500, 'over1'),
-      overrunDelivery(2000, 'r1'), // overrun: does not count
-      response(3000, 'r2'),
-      criterionMet(3000, 'r2'),
-      abandoned(13000), // abandoned: does not count
+      vrDelivery(1100, 'r1', 'on-schedule'),
     ]
-    expect(vrCyclesCompleted(events)).toBe(0)
+    expect(vrTrialHistory(events)).toEqual([
+      { responseId: 'r1', mark: 'credited' },
+    ])
   })
 
-  it('does not count a CRF delivery that happens to share the exact instant VR is entered (zero elapsed time between deliver and advance)', () => {
-    // A learner can deliver, then immediately advance to VR with no tick
-    // in between: the delivery and the phase-changed('vr') event then share
-    // the same `at`. Bucketing purely by round time window would double-
-    // count this instant (VR's window start is inclusive); attributing by
-    // the delivery's own opening criterion's `schedule` avoids the
-    // ambiguity entirely.
-    const events: SimEvent[] = [
-      phaseChanged(0, 'crf'),
-      response(500, 'crf-r'),
-      { type: 'criterion-met', at: 500, responseId: 'crf-r', schedule: 'CRF' },
-      {
-        type: 'stimulus-delivered',
-        at: 1000,
-        stimulusId: 'treat',
-        responseId: 'crf-r',
-        latencyMs: 500,
-        contingency: 'response-contingent',
-        timing: 'delayed',
-        scheduleFidelity: 'on-schedule',
-      },
-      phaseChanged(1000, 'vr'), // same instant as the CRF delivery above
-    ]
-    expect(vrCyclesCompleted(events)).toBe(0)
-  })
-
-  it('does not count a CRF cycle completed before entering VR', () => {
-    const events: SimEvent[] = [
-      phaseChanged(0, 'crf'),
-      response(500, 'crf-r'),
-      { type: 'criterion-met', at: 500, responseId: 'crf-r', schedule: 'CRF' },
-      {
-        type: 'stimulus-delivered',
-        at: 550,
-        stimulusId: 'treat',
-        responseId: 'crf-r',
-        latencyMs: 50,
-        contingency: 'response-contingent',
-        timing: 'prompt',
-        scheduleFidelity: 'on-schedule',
-      },
-      phaseChanged(1000, 'vr'),
-    ]
-    expect(vrCyclesCompleted(events)).toBe(0)
-  })
-
-  it('does not count a VR-scheduled delivery that lands after the VR round has ended', () => {
+  it('marks a response blocked when a matching VR delivery exists but was not on-schedule', () => {
     const events: SimEvent[] = [
       phaseChanged(0, 'vr'),
-      response(500, 'vr-r'),
-      { type: 'criterion-met', at: 500, responseId: 'vr-r', schedule: 'VR' },
-      onScheduleDelivery(550, 'vr-r'),
-      phaseChanged(1000, 'extinction'),
-      response(1500, 'ext-r'),
-      { type: 'criterion-met', at: 1500, responseId: 'ext-r', schedule: 'VR' },
-      onScheduleDelivery(1550, 'ext-r'),
+      response(1000, 'r1'),
+      vrDelivery(1100, 'r1', 'premature'),
     ]
-    expect(vrCyclesCompleted(events)).toBe(1)
+    expect(vrTrialHistory(events)).toEqual([
+      { responseId: 'r1', mark: 'blocked' },
+    ])
+  })
+
+  it('marks a response blank (null) when no delivery ever credited it', () => {
+    const events: SimEvent[] = [
+      phaseChanged(0, 'vr'),
+      response(1000, 'r1'),
+      response(2000, 'r2'),
+      vrDelivery(2100, 'r2', 'on-schedule'),
+    ]
+    expect(vrTrialHistory(events)).toEqual([
+      { responseId: 'r1', mark: null },
+      { responseId: 'r2', mark: 'credited' },
+    ])
+  })
+
+  it('excludes responses from before entering VR', () => {
+    const events: SimEvent[] = [
+      phaseChanged(0, 'crf'),
+      response(500, 'crf-r'),
+      phaseChanged(1000, 'vr'),
+      response(2000, 'r1'),
+      vrDelivery(2100, 'r1', 'on-schedule'),
+    ]
+    expect(vrTrialHistory(events)).toEqual([
+      { responseId: 'r1', mark: 'credited' },
+    ])
   })
 })
 
@@ -374,10 +419,8 @@ describe('vrCoachingDue', () => {
 
   it('is false once vrCyclesToComplete on-schedule cycles are already done', () => {
     const events: SimEvent[] = [phaseChanged(0, 'vr')]
-    let t = 0
     for (let i = 0; i < config.vrCyclesToComplete; i++) {
-      t += 1000
-      events.push(...completedCycle(t, `c${i}`))
+      events.push(vrDelivery(1000 + i * 1000, `c${i}`, 'on-schedule'))
     }
     expect(vrCoachingDue(events, config.vrCoachingPauseMs, config)).toBe(false)
   })

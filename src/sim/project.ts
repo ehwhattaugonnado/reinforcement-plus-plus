@@ -64,12 +64,7 @@ function applyToFields(
       return {
         ...state,
         phase: event.phase,
-        schedulePlan: planFor(
-          event.phase,
-          config,
-          [...state.events, event],
-          state.seed,
-        ),
+        schedulePlan: planFor(event.phase, config, [...state.events, event]),
       }
 
     case 'pair-presented':
@@ -207,7 +202,7 @@ function applyBehavioralEvent(
     next = {
       ...next,
       schedulePlan: toVrSchedulePlan(
-        deriveVrScheduleState([...state.events, event], state.seed, config),
+        deriveVrScheduleState([...state.events, event], config),
       ),
     }
   }
@@ -232,9 +227,9 @@ function toVrSchedulePlan(vrState: VrScheduleState): SchedulePlan {
   return {
     type: 'VR',
     meanRatio: 3,
-    currentRequirement: vrState.currentRequirement,
     responsesSinceReinforcement: vrState.responsesSinceReinforcement,
-    generatedRequirements: vrState.generatedRequirements,
+    acceptedGaps: vrState.acceptedGaps,
+    runningAverage: vrState.runningAverage,
   }
 }
 
@@ -242,13 +237,12 @@ function planFor(
   phase: Phase,
   config: SimConfig,
   eventsSoFar: readonly SimEvent[],
-  seed: string,
 ): SchedulePlan | null {
   switch (phase) {
     case 'crf':
       return { type: 'CRF', responsesRequired: 1 }
     case 'vr':
-      return toVrSchedulePlan(deriveVrScheduleState(eventsSoFar, seed, config))
+      return toVrSchedulePlan(deriveVrScheduleState(eventsSoFar, config))
     default:
       return null
   }
