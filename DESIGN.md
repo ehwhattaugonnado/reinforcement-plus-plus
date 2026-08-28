@@ -2,12 +2,12 @@
 name: Reinforcement++
 description: A browser-based pet-training simulation teaching paired-stimulus preference assessment and positive reinforcement.
 colors:
-  paper: '#efe9dd'
-  paper-deep: '#e4dcc9'
-  paper-edge: '#d8ceb5'
-  ink: '#2f2b26'
-  ink-soft: '#5c5346'
-  pencil: '#948a72'
+  paper: '#ffffff'
+  paper-deep: '#eef0f2'
+  paper-edge: '#d7dbe0'
+  ink: '#1c1e22'
+  ink-soft: '#52585f'
+  pencil: '#8b929b'
   flag: '#e8b93a'
   flag-ink: '#4a3a0a'
   ballpoint: '#2f4f8f'
@@ -107,7 +107,8 @@ technique to caregivers and RBT trainees in the same session. Cute here
 means "an honest observational record," not "trivial."
 
 **Key Characteristics:**
-- One continuous ruled sheet, never a card grid.
+- One continuous ruled ledger plus its control margin — never a card grid,
+  a KPI tile, or a nav sidebar.
 - Ballpoint blue is the only saturated color spent on interaction; the rest
   of the palette is paper, ink, and one highlighter accent.
 - Data, timestamps, and field labels are always monospace; prose is always
@@ -117,10 +118,12 @@ means "an honest observational record," not "trivial."
 
 ## Colors
 
-A cream clipboard-paper neutral family carries the whole surface; one
+A true-white printed-stock neutral family carries the whole surface; one
 saturated blue is spent on everything interactive, and two narrow accents
 (a highlighter yellow, a stamp red) are reserved for two specific,
-non-interchangeable meanings.
+non-interchangeable meanings. An earlier pass used a warm kraft-paper
+neutral family (`#efe9dd` ground); it read as brown rather than as paper
+and was replaced outright, not tinted.
 
 ### Primary
 - **Ballpoint Blue** (`#2f4f8f`): every primary action, selection state,
@@ -147,21 +150,27 @@ non-interchangeable meanings.
   states in that sense.
 
 ### Neutral
-- **Paper** (`#efe9dd`): the sheet's ground.
-- **Paper, Deep** (`#e4dcc9`): panels set into the sheet — session
+- **Paper** (`#ffffff`): the sheet's ground — true white printed stock,
+  not an off-white tint.
+- **Paper, Deep** (`#eef0f2`): panels set into the sheet — session
   controls, status fields, chart backgrounds, tables.
-- **Paper Edge** (`#d8ceb5`): every hairline rule and default border.
-- **Graphite Ink** (`#2f2b26`): primary text, always ≥10:1 against paper.
-- **Soft Ink** (`#5c5346`): secondary text, a darkened tint of graphite
-  ink (never a desaturated gray), tuned to clear 4.5:1 against
-  `paper-deep`, the darkest surface it ever sits on.
-- **Pencil** (`#948a72`): provisional marks — dashed/dotted borders, the
+- **Paper Edge** (`#d7dbe0`): every hairline rule and default border.
+- **Graphite Ink** (`#1c1e22`): primary text, ~16:1 against paper.
+- **Soft Ink** (`#52585f`): secondary text, a darkened tint of graphite
+  ink (never a desaturated gray), clearing 7:1 against paper and 6.4:1
+  against `paper-deep`, the darkest surface it ever sits on.
+- **Pencil** (`#8b929b`): provisional marks — dashed/dotted borders, the
   scrollbar thumb, the clipboard clip — never body text.
 
 ### Named Rules
-**The One Ledger Rule.** The whole product is one sheet. A new screen
-never introduces a card, a sidebar, or a second background color family;
-it adds a new ruled section to the same document.
+**The One Ledger Rule.** The whole product is drawn from one paper
+surface and one set of tokens. A new screen never introduces a card, a
+second background-color family, or a floating panel with its own
+elevation; it adds a new ruled section to the same document. The control
+margin (see Layout) is not an exception — it is a `paper-deep` boxed
+field, the same component the ledger already uses for status lines and
+fieldsets, positioned in a fixed grid column instead of the vertical
+flow.
 
 **The Earned-Color Rule.** Stamp red only ever marks something the event
 log has actually evidenced (a recorded selection, a demonstrated
@@ -214,13 +223,28 @@ emphasis — weight and size carry emphasis instead.
 
 ## Layout
 
-A single-column sheet, `max-width: 46rem`, centered, floating on a deeper
+A two-column sheet, `max-width: 68rem`, centered, floating on a deeper
 paper-edge backdrop. The sheet's own background is a horizontal rule
 pattern (`repeating-linear-gradient`, one line every 1.7rem) — the page is
-never a flat fill. One breakpoint at `36rem`: below it the sheet loses its
-radius and margin and becomes edge-to-edge (the clipboard fills the
-viewport rather than floating on a desk), controls stack to full width,
-and the session-controls fieldsets wrap.
+never a flat fill.
+
+The letterhead (`<header>`) spans the full width at the top. Below it, a
+CSS grid splits the sheet into the ledger (`<main>`, `minmax(0, 1fr)`) and
+a fixed `16rem` control margin (`SessionControls`: pause, speed, detail,
+timer), separated by a `2.5rem` column gap. The margin holds `position:
+sticky` at `top: 1.5rem` so pause and speed stay reachable through a long
+training round without hunting back up the page. This replaced an earlier
+single-column layout capped at `46rem` — on any laptop-or-wider viewport
+it left most of the frame as empty backdrop and pushed the standing
+controls into the vertical scroll of the trial content itself.
+
+**Breakpoints:**
+- **`50rem`:** the control margin no longer has room beside the ledger; the
+  grid collapses to one column (`header` / `rail` / `main`, in that
+  reading order) and the margin becomes statically positioned again.
+- **`36rem`:** the sheet loses its radius and outer margin and becomes
+  edge-to-edge (the clipboard fills the viewport rather than floating on a
+  desk), and the delivery-target/round-action buttons go full width.
 
 Vertical rhythm follows the ruled background: section spacing (`h2`
 margin-top `2rem`, `h3` margin-top `1.75rem`) is a multiple of the rule
@@ -342,15 +366,16 @@ justification beyond habit.
 None: the product is a single linear flow (assessment → baseline → CRF →
 VR-3 → optional extinction → debrief) with no persistent nav chrome by
 product design (ADR 0002/0004). `SessionControls` (pause, speed, detail
-mode) is the closest analog and is styled as a `paper-deep` hardware strip
-directly under the letterhead, not a nav bar.
+mode, elapsed time) is the closest analog and is styled as a `paper-deep`
+boxed field standing in the sheet's control margin (see Layout) — a Status
+Field variant, not a nav bar.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** keep the whole product as one ruled sheet (`max-width: 46rem`,
-  ruled-line background); a new screen adds a section, never a second
-  surface.
+- **Do** keep the whole product as one ruled sheet with one fixed control
+  margin (`max-width: 68rem`, ruled-line background); a new screen adds a
+  ledger section, never a second card surface.
 - **Do** put anything that is data, a timestamp, or a field label in IBM
   Plex Mono; keep prose in IBM Plex Sans. Never swap the two for emphasis.
 - **Do** theme browser-native surfaces from the palette: `::selection`,
@@ -360,9 +385,10 @@ directly under the letterhead, not a nav bar.
 - **Do** mark the "due now" / attention state with the highlighter wash
   (`color-mix(in srgb, flag ..%, paper-deep)`), never a colored border
   accent.
-- **Do** keep dark mode inside the same paper material family (dark kraft
-  ground, warm parchment ink) — never fall back to a generic slate/neon
-  dark theme; the use scene is the same clipboard read by a desk lamp.
+- **Do** keep dark mode inside the same paper material family (a designed
+  charcoal ground, not a dark tint of the light kraft palette) — never
+  fall back to a generic slate/neon dark theme; the use scene is the same
+  clipboard read by a desk lamp.
 
 ### Don't:
 - **Don't** add a colored `border-left`/`border-right` accent to any box.
@@ -374,8 +400,10 @@ directly under the letterhead, not a nav bar.
   other element. It is a named, singular exception (see Elevation), not a
   depth system.
 - **Don't** introduce a card grid, an icon-plus-heading-plus-text
-  scaffold, or a sidebar. The One Ledger Rule holds even when a new screen
-  feels like it wants its own visual identity.
+  scaffold, or a nav sidebar. The One Ledger Rule holds even when a new
+  screen feels like it wants its own visual identity — the one sanctioned
+  exception is the existing control margin, which is a Status Field
+  component, not a new surface (see Layout, Navigation).
 - **Don't** add a kicker or eyebrow label above a heading. Existing
   uppercase mono labels in this system are real `<legend>`/`<h4>`
   elements doing structural work, not decorative kickers riding above a
@@ -384,3 +412,6 @@ directly under the letterhead, not a nav bar.
   already draw in `currentColor` and inherit from `.chart`'s CSS. New
   chart styling belongs in `styles.css`, never in the chart components
   themselves (ADR 0007 keeps visx behind one file per chart).
+- **Don't** revert the neutral palette to a warm kraft/brown cast. This
+  system shipped that once, the product owner rejected it on sight, and it
+  was replaced with the true-white family above.

@@ -7,19 +7,19 @@
 
 :root {
   /* -- material palette --------------------------------------------- */
-  --paper: #efe9dd; /* clipboard sheet ground */
-  --paper-deep: #e4dcc9; /* ruled boxes, panels set into the sheet */
-  --paper-edge: #d8ceb5; /* rule lines, hairline borders */
-  --ink: #2f2b26; /* graphite body text */
-  --ink-soft: #5c5346; /* secondary text, tinted from ink, never gray */
-  --pencil: #948a72; /* provisional / not-yet-recorded marks */
+  --paper: #ffffff; /* clipboard sheet ground — true white printed stock */
+  --paper-deep: #eef0f2; /* ruled boxes, panels set into the sheet */
+  --paper-edge: #d7dbe0; /* rule lines, hairline borders */
+  --ink: #1c1e22; /* graphite body text */
+  --ink-soft: #52585f; /* secondary text, tinted from ink, never flat gray */
+  --pencil: #8b929b; /* provisional / not-yet-recorded marks */
   --flag: #e8b93a; /* highlighter yellow — attention, "due now" */
   --flag-ink: #4a3a0a; /* text set on top of a flag highlight */
   --ballpoint: #2f4f8f; /* primary action, selection, focus */
   --ballpoint-deep: #22396b; /* pressed / hover-deepened ballpoint */
   --stamp: #a4372a; /* rubber accession stamp — earned status only */
 
-  --shadow-color: 38 30 14;
+  --shadow-color: 32 36 42;
   color-scheme: light;
 
   --font-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -28,19 +28,20 @@
 }
 
 /*
- * Dark mode is not the SaaS default of slate-and-neon: the use scene is the
- * same clipboard sheet read at a desk lamp after dark, so it stays a paper
- * world — dark kraft board with warm parchment ink — rather than switching
- * material families.
+ * Dark mode is designed, not derived: the use scene is the same clipboard
+ * sheet read at a desk lamp after dark, so it stays a paper world (ruled
+ * lines, stamped headers, the same two accent colors) rather than switching
+ * material families — but the ground is a cool charcoal board, not a dark
+ * tint of the light palette's kraft. See DESIGN.md, Colors.
  */
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #211b12;
-    --paper-deep: #2b2318;
-    --paper-edge: #4a3d29;
-    --ink: #ece3d0;
-    --ink-soft: #b9ac8e;
-    --pencil: #8a7d63;
+    --paper: #15171a;
+    --paper-deep: #1e2125;
+    --paper-edge: #33373d;
+    --ink: #eceef0;
+    --ink-soft: #a8adb5;
+    --pencil: #6b7178;
     --flag: #e8b93a;
     --flag-ink: #2a2005;
     --ballpoint: #86a4e8;
@@ -197,11 +198,26 @@ input[type='checkbox'] {
 
 /* -- the sheet ------------------------------------------------------- */
 
+/*
+ * The sheet is a two-column form, not a single scroll: a wide ledger column
+ * for the actual trial content, and a fixed control margin on the right for
+ * the standing session controls (pause, speed, detail, timer) — the way a
+ * real data sheet keeps its header/timing box in a margin rather than
+ * interleaved with the trial rows. Never a card grid: the margin is a rule
+ * line and a tint step, both drawn from the same paper palette, not a
+ * second surface. See DESIGN.md, Layout.
+ */
 .app-shell {
   position: relative;
-  max-width: 46rem;
+  max-width: 68rem;
   margin: 2.5rem auto;
   padding: 2rem 2.25rem 2.75rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16rem;
+  grid-template-areas:
+    'header header'
+    'main   rail';
+  column-gap: 2.5rem;
   background: repeating-linear-gradient(
     var(--paper) 0,
     var(--paper) 1.7rem,
@@ -213,6 +229,11 @@ input[type='checkbox'] {
   box-shadow:
     0 1px 2px rgb(var(--shadow-color) / 0.12),
     0 12px 28px -14px rgb(var(--shadow-color) / 0.35);
+}
+
+.app-shell > main {
+  grid-area: main;
+  min-width: 0;
 }
 
 /* The clip holding the sheet to the board: two CSS shapes, no image. */
@@ -243,6 +264,7 @@ input[type='checkbox'] {
 }
 
 .app-shell > header {
+  grid-area: header;
   border-bottom: 2px solid var(--ink);
   padding-bottom: 0.85rem;
   margin-bottom: 0.5rem;
@@ -273,14 +295,24 @@ input[type='checkbox'] {
   margin: 0;
 }
 
-/* -- session controls: the clipboard hardware strip ------------------ */
+/* -- session controls: the sheet's control margin --------------------- */
 
+/*
+ * The standing controls (pause, speed, detail, timer) live in a fixed
+ * margin beside the ledger, the way a real data sheet keeps a timing/header
+ * box off to the side of the trial rows rather than mixed into them.
+ * Sticky so pause stays reachable through a long training round.
+ */
 .session-controls {
+  grid-area: rail;
+  align-self: start;
+  position: sticky;
+  top: 1.5rem;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.9rem 1.5rem;
-  align-items: center;
-  padding: 0.85rem 1rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+  padding: 1rem;
   margin: 1.25rem 0 0.5rem;
   background: var(--paper-deep);
   border: 1px solid var(--paper-edge);
@@ -292,8 +324,9 @@ input[type='checkbox'] {
   padding: 0;
   margin: 0;
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
 }
 
 .session-controls legend {
@@ -303,14 +336,12 @@ input[type='checkbox'] {
   letter-spacing: 0.06em;
   color: var(--ink-soft);
   padding: 0;
-  float: left;
-  margin-right: 0.5rem;
 }
 
 .session-controls label {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.4rem;
   font-family: var(--font-data);
   font-size: 0.9rem;
 }
@@ -658,19 +689,28 @@ details summary:hover {
 
 /* -- responsive --------------------------------------------------------- */
 
+/* Below this width the control margin no longer has room beside the
+   ledger; it stacks above the trial content instead, in the same order
+   it would read in the source document. */
+@media (max-width: 50rem) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'header'
+      'rail'
+      'main';
+  }
+
+  .session-controls {
+    position: static;
+  }
+}
+
 @media (max-width: 36rem) {
   .app-shell {
     margin: 1.25rem auto;
     padding: 1.5rem 1.25rem 2rem;
     border-radius: 0;
-  }
-
-  .session-controls {
-    align-items: stretch;
-  }
-
-  .session-controls fieldset {
-    flex-wrap: wrap;
   }
 
   .delivery-target {
