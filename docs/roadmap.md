@@ -313,9 +313,14 @@ The primary dependency order is:
 
 Visual design, copy drafting, and accessibility review can proceed alongside
 simulation milestones, but final wording and charts depend on the shared
-summary contract. GitHub Pages already hosts the development preview; formal
-approval of it as the public-release target and the release process remain
-deferred and are not on the implementation critical path.
+summary contract. A first full visual-design pass ("The Trial Data Sheet",
+recorded in `DESIGN.md` at the repo root) is in place, covering palette,
+typography, layout, and the recurring component patterns; it will need a
+follow-up pass once the Milestone 7/8 screens it hasn't yet seen (the
+complete debrief summary, onboarding, restart/lost-session messaging) are
+built. GitHub Pages already hosts the development preview; formal approval
+of it as the public-release target and the release process remain deferred
+and are not on the implementation critical path.
 
 ## 5. Cross-Cutting Definition of Done
 
