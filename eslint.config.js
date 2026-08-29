@@ -5,7 +5,21 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'node_modules'] },
+  {
+    // Mirrors .gitignore. Flat config does not auto-ignore dot-directories,
+    // so the vendored agent-skill copies under `.claude/`, `.github/`, and
+    // `.agents/` — all gitignored by `.*/` — would otherwise be linted as
+    // project source and bury real findings under thousands of `no-undef`
+    // errors for Node globals they legitimately use.
+    ignores: [
+      '.*/**',
+      'dist',
+      'coverage',
+      'node_modules',
+      'playwright-report',
+      'test-results',
+    ],
+  },
   js.configs.recommended,
   {
     // Typed linting applies to the typed program only; the flat config itself
