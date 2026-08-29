@@ -2,7 +2,7 @@
 
 ## Project
 
-Reinforcement++ is a browser-based pet-training simulation that teaches preference assessment and positive reinforcement. V1 is a 10–20 minute, low-stakes educational experience, not clinical decision support. The repository contains the approved design documentation and an in-progress Vite/React/TypeScript implementation. Milestones 0–6 are complete; Milestone 7's shared debrief screen exists and both presentation modes now reach the same conclusions, but its complete mode-neutral summary is still partial; Milestone 8 release hardening has not started. `DESIGN.md` (at the repo root) records the first full visual-design pass, "The Trial Data Sheet," and the stopped-state and chart-geometry rules added by the 2026-08-29 UI/UX defect pass (`docs/roadmap.md` §2.1.1, and the follow-up polish pass in §2.1.2). Use `docs/roadmap.md` as the detailed status source.
+Reinforcement++ is a browser-based pet-training simulation that teaches preference assessment and positive reinforcement. V1 is a 10–20 minute, low-stakes educational experience, not clinical decision support. The repository contains the approved design documentation and an in-progress Vite/React/TypeScript implementation. Milestones 0–6 are complete; Milestone 7's shared debrief screen exists and both presentation modes now reach the same conclusions, but its complete mode-neutral summary is still partial; Milestone 8 release hardening has not started. `DESIGN.md` (at the repo root) records the first full visual-design pass, "The Trial Data Sheet," plus the stopped-state, chart-geometry, rule-grid and control-bar rules added by the 2026-08-29 UI/UX passes (`docs/roadmap.md` §2.1.1 and §2.1.2). Outstanding UI/UX work is listed in §2.1.3 and tracked as GitHub issues. Use `docs/roadmap.md` as the detailed status source.
 
 ## Read Before Changing Code
 
@@ -15,6 +15,8 @@ Reinforcement++ is a browser-based pet-training simulation that teaches preferen
 - `docs/aba-glossary.md`: source of truth for behavior-analytic terminology and copy.
 
 Keep these documents consistent when a product or architecture decision changes. Record significant, hard-to-reverse decisions as ADRs rather than silently diverging from the approved design.
+
+`DESIGN.md` is the visual system's source of truth and is authored, not generated. `.impeccable/design.json` is a sidecar derived from it: refresh the sidecar from `DESIGN.md`, never the reverse. Named rules and the do's/don'ts list in `DESIGN.md` are binding on new CSS — in particular the type ramp and the standing ban on `border-left`/`border-right` accents, both of which this codebase has already drifted from once.
 
 ## Architecture Invariants
 
@@ -47,10 +49,12 @@ Keep these documents consistent when a product or architecture decision changes.
 - Use tolerant cohort/property assertions for probabilistic behavior; do not require every seed to produce an idealized curve.
 - Use React Testing Library for UI integration and a small end-to-end suite for the complete required path, mode switching, timing controls, background pausing, and accessibility behavior.
 - Meet WCAG 2.2 AA expectations: keyboard/pointer/touch operation, large delivery target, non-color status cues, reduced motion, textual state announcements, and table/text alternatives for every graph.
-- Keep focus order in reading order: the task comes before the timing and presentation controls, at every width. Pause must stay reachable throughout a timed round without hunting back up the page, and anything fixed over the sheet must reserve its own height so it never covers the end of a round.
+- Keep focus order in reading order: the task comes before the timing and presentation controls, at every width. Pause must stay reachable throughout a timed round without hunting back up the page, and anything fixed over the sheet must reserve its own height so it never covers the end of a round. Measure that height at runtime rather than predicting it when it depends on the viewport or on copy the simulation chooses (`useReservedHeight`); a predicted reserve was wrong three times.
+- Verify layout, hit-testing, and contrast in a real browser, not only in jsdom. Measure the specific number a change controls, at widths inside each breakpoint band rather than only at its ends, under the longest copy the simulation can produce, and run axe in both colour schemes. See `docs/testing-strategy.md`, "Layout and presentation defects."
 - Treat educational misconceptions and Simple/Advanced conclusion mismatches as defects.
 - Never let learner-facing copy assert something the event log does not support. Coaching text in particular is derived from metrics, not from the clock that triggered it, and must be able to conclude that nothing is wrong (`src/app/screens/coaching.ts`).
-- Keep system units out of learner-facing copy. Raw milliseconds, event ids, and unrounded floats belong in the Advanced event table, not in a sentence addressed to the learner.
+- Keep system units out of learner-facing copy. Raw milliseconds, event ids, and unrounded floats belong in the Advanced event table, not in a sentence addressed to the learner — and even there, round millisecond floats for display; the core keeps full precision.
+- Treat a live view as a monitor, not an archive. Anything that grows for the length of a session is windowed where the learner is working, and says how much it is showing; the complete record belongs in the debrief.
 
 ## Working Conventions
 

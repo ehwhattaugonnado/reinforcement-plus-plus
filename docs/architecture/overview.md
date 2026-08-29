@@ -96,6 +96,17 @@ can therefore stop without being asked, the shell surfaces *why* it stopped
 state and never reaches the core. While paused, every log-mutating command
 is rejected (ADR 0011).
 
+The shell may also read layout back from the DOM when a value cannot honestly
+be predicted. `useReservedHeight` observes the fixed control bar below 50rem
+and writes its measured height to a CSS custom property, so the sheet reserves
+exactly the space the bar occupies. This is presentation state of the same
+kind as `PauseReason`: it reads layout and writes one custom property, never
+touches the core, and degrades to the stylesheet's static value wherever
+`ResizeObserver` is unavailable (jsdom included, so it is inert under test).
+The general rule is in AGENTS.md — anything fixed over the sheet reserves its
+own height, and a height that depends on runtime copy is measured rather than
+guessed.
+
 The UI owns `mode: 'simple' | 'advanced'`; mode never changes sim behavior.
 Accessibility speed is different: it is an explicit sim input because it
 changes simulated timing windows in a controlled, testable way.
@@ -110,6 +121,8 @@ This list describes the approved v1 screen ownership. `AppShell`,
 `AssessmentScreen`, and the baseline/CRF/VR portions of `TrainingScreen`
 (including its Advanced-mode live cumulative-record chart, response-rate
 chart, event table, and VR reinforcement-history table) are currently wired.
+The live event table is windowed to the most recent events and says so; the
+complete log renders unwindowed in the debrief.
 Extinction timing/completion, mode-specific training copy, and a basic shared
 `DebriefScreen` are wired. Onboarding and the complete mode-neutral summary
 contract remain implementation work.
@@ -123,7 +136,18 @@ contract remain implementation work.
   coaching, stimulus delivery, creature animation, and progress. Advanced mode
   adds the live cumulative record and event log.
 - **DebriefScreen:** renders Simple or Advanced views from a single session
-  summary object.
+  summary object. Every conclusion — the reinforcer line, the extinction line,
+  and the closing line — is rendered in *both* modes; Advanced adds the charts
+  and their data tables, which is a difference in detail, not in conclusion
+  (ADR 0004). Neither mode may end by pointing at the other.
+
+Copy that a screen derives from state lives in its own plain module beside the
+screen, so it can be tested against constructed evidence rather than a
+cooperative seed: `screens/coaching.ts` (what the coaching pause says),
+`screens/debrief-closing.ts` (the debrief's closing line), and
+`screens/hierarchy.ts` (naming a tie in the preference hierarchy). These are
+presentation, not simulation: they read a snapshot or a summary and return
+strings.
 
 ## Graphing
 

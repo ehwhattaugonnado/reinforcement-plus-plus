@@ -52,7 +52,7 @@ status is:
 | 5 — VR-3 | Complete | The original exact-seeded-per-cycle design shipped but proved unplayable by a live human tester: nothing communicates a hidden per-delivery target, so a reasonable delivery could be rejected. Replaced per [ADR 0010](adr/0010-vr-fidelity-as-running-average.md) with a session-wide running-average tolerance (seeded phantom prior, no floor): `classifyVrDelivery` (vr.ts) judges each delivery against the hypothetical average it would produce, and a fixed-ratio-in-disguise check (`not-variable`) excludes a repeated identical gap from credit. `stimulus-delivered` now carries `schedule: 'CRF' \| 'VR' \| null`, stamped at commit time. VR no longer emits `criterion-met`/`criterion-missed`/`cycle-abandoned` — there is no discrete "due" instant under a no-floor average model. The guided UI exposes response count, running average, and a trial-by-trial reinforcement-history table (`vrTrialHistory`), not a nonexistent eligibility cue. |
 | 6 — Extinction/evidence | Complete | Event-derived reinforcer-evidence and burst-detection rules are tested, including asymmetric sample-count floors and a calibrated 90s detection window; `learning.ts` has a real seeded extinction-transition burst term, live extinction responses append withheld VR criteria, the round lasts 150 simulated seconds, and `finishSession()` handles both skip and completion transitions. The observational UI withholds delivery and exposes completion. |
 | 7 — Debrief/charts | Partial | Shared chart-data projectors and accessible visx chart views are tested and wired into Advanced-mode training. A basic shared debrief presents event-derived reinforcer/extinction conclusions in both modes and Advanced charts. The complete mode-neutral summary (assessment accuracy, fidelity, latency/errors, CRF/VR trends, and satiation), conclusion-parity tests, and removal of app-layer default-config reads remain. |
-| 8 — Release hardening | Not started | Playwright currently covers shell smoke, controls, keyboard operation, and an automated axe pass, not the complete learner journey. A 2026-08-29 UI/UX defect pass (see 2.1.1) closed a batch of interaction defects and added component coverage, but the end-to-end journey suite is still outstanding. |
+| 8 — Release hardening | Not started | Playwright currently covers shell smoke, controls, keyboard operation, and an automated axe pass, not the complete learner journey. The 2026-08-29 UI/UX passes (2.1.1, 2.1.2) closed a batch of interaction defects and added component coverage; the end-to-end journey suite, the release contrast review (2.1.3, #11) and chart legibility (#1) are still outstanding. |
 
 ### 2.1.1 UI/UX defect pass (2026-08-29)
 
@@ -158,6 +158,53 @@ buttons hit-testable and clickable, no horizontal page scroll, the reserve
 tracking the bar to the pixel under each of the three pause messages, and
 zero axe violations running and paused in both light and dark schemes. The
 debrief screen carries its own axe assertion in both modes.
+
+**Design-system drift caught in the same pass.** Two literal font sizes the
+pass introduced (0.82rem, 0.85rem) were off `DESIGN.md`'s type ramp and are
+now the documented label and caption steps; nothing outside the ramp remains
+in the stylesheet. The new hierarchy tie note had also picked up a
+`border-left` accent — the one pattern `DESIGN.md` bans by name, having
+shipped it once already — and is set by indent and the data voice instead.
+`.impeccable/design.json` predated 2.1.1 and contradicted `DESIGN.md` on
+palette, shadows, and layout; it was refreshed *from* `DESIGN.md`, which is
+authored and stays the source of truth.
+
+**What this pass cost, recorded so it is not repeated.** The reserve for the
+fixed control bar was wrong three times before it was right: tuned per
+breakpoint (24px short at 580px, a width neither end of the band shows), then
+raised to the tallest arrangement measured (45px short under
+`Paused because you left this tab.`, a message the session shows itself),
+then finally measured at runtime. The lesson is not about that reserve: a
+layout constant that depends on the viewport *and* on copy the simulation
+chooses cannot be predicted, and the unit suite is green through every one of
+those failures. `docs/testing-strategy.md`, "Layout and presentation
+defects," now carries the practice.
+
+### 2.1.3 Outstanding UI/UX work
+
+Tracked as GitHub issues; #2-#8, #12 and #13 were closed by 2.1.2.
+
+- **#1 Chart axis text is illegible at small viewports** (6.23px at 375px).
+  Needs a container-driven viewBox (`ResizeObserver` or a container query),
+  not a CSS `font-size` change — SVG text is in viewBox units and scales
+  identically. Not information loss: the SVGs are `aria-hidden` and the text
+  summary and data table carry the same facts.
+- **#9 No onboarding.** A cold visitor gets no framing, duration estimate, or
+  warning before investing 10-20 minutes. Partly addressed: the debrief's
+  closing line now says nothing is saved, but that is the wrong end of the
+  session. PRODUCT.md requires onboarding to be self-sufficient, since
+  neither arrival path guarantees an instructor.
+- **#10 Focus drops to `<body>`** when a screen or section unmounts.
+- **#11 `aria-disabled` contrast** (`--pencil` on `--paper` = 3.14:1, on
+  `--paper-deep` = 2.75:1). These are deliberately not natively `disabled`,
+  so the WCAG 1.4.3 inactive-component exception is arguable rather than
+  clearly applicable. Resolving it moves `--pencil`/`--paper` globally, so it
+  is a product/palette decision, not a defect fix.
+- **#14 No progress indicator** across the four training rounds.
+- **#15 The creature has no visual existence.** The largest gap relative to
+  its position in the queue: every other quality investment in this app
+  competes for attention against the absence of the pet in a pet-training
+  simulation.
 
 The next critical-path increment is completing Milestone 7's shared
 debrief/session summary. The extinction-round contract is 150 simulated seconds,

@@ -69,3 +69,34 @@ debrief path. Cover mode switching mid-session, pause/speed behavior,
 background-tab pausing, keyboard-only operation, reduced motion, and the
 accessible chart alternative. Include automated accessibility checks, while
 recognizing that they do not replace manual testing.
+
+Every screen that renders conclusions carries its own axe assertion, in both
+presentation modes. The debrief was the last one without, and it is the screen
+where a mode difference matters most.
+
+## Layout and presentation defects
+
+A class of defect in this app is invisible to both suites above: jsdom has no
+layout, and a passing assertion says nothing about where an element actually
+sits. Every UI/UX defect found in the 2026-08-29 passes (`docs/roadmap.md`
+2.1.1, 2.1.2) was found by measuring a real browser, and several were found
+*after* the unit suite went green on the same change.
+
+So when a change moves, sizes, fixes, or overlays anything, drive a headless
+browser and measure the specific number the change is supposed to control —
+element geometry, hit-testability at a point (`elementFromPoint`, plus a real
+click, which catches interception the geometry check misses), scroll extents,
+computed styles — at the widths the breakpoints actually separate, not only at
+the two ends. Two lessons paid for:
+
+- **Measure inside the band, not at its edges.** A reserve tuned at 375px and
+  800px was 24px short at 580px, where the layout has a third arrangement
+  neither end shows.
+- **Measure the worst content, not the content that happens to be on screen.**
+  The same reserve was correct for `Paused.` and 45px short for
+  `Paused because you left this tab.`, a string the session shows itself. When
+  a measurement depends on copy the simulation chooses, drive every branch of
+  that copy.
+
+Run axe in both colour schemes. Dark mode has its own palette, so a contrast
+regression there is invisible to a light-mode-only pass.
