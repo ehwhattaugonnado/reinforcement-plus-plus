@@ -12,6 +12,7 @@ import {
   EventLogTable,
   ResponseRateChart,
 } from '../charts'
+import { Creature, type CreatureTriggerKind } from '../components/Creature'
 import type { Mode } from '../hooks/useMode'
 import type { PauseReason } from '../hooks/useSimState'
 import { rankLabel, tieNote, tiedRanks } from './hierarchy'
@@ -23,6 +24,43 @@ import { COACHING_COPY, deriveCrfCoaching, deriveVrCoaching } from './coaching'
  * becomes the page.
  */
 const LIVE_EVENT_LOG_LIMIT = 10
+
+/**
+ * How recent a response/delivery has to be to still play as a flourish on
+ * Pip. Short on purpose: this is a gesture, not the sentence-length window
+ * `lastResponseAgoMs` uses below.
+ */
+const CREATURE_TRIGGER_WINDOW_MS = 900
+
+/**
+ * A pure derivation, same shape as `lastResponseAgoMs`: no stored
+ * "currently animating" flag, so there is nothing to desync from the event
+ * log. Returns `null` while paused -- `elapsedSimMs` stops advancing under a
+ * pause (ADR 0011), and without this the flourish would either play forever
+ * against a stopped clock or restart the instant a still-recent event came
+ * back into the window on resume. A standalone function, not inlined in the
+ * component, because the object literal inside the loop otherwise defeats
+ * the React Compiler's memoization.
+ */
+function deriveCreatureTrigger(
+  events: SessionState['events'],
+  elapsedSimMs: number,
+  paused: boolean,
+): { kind: CreatureTriggerKind; key: string } | null {
+  if (paused) return null
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]
+    if (e === undefined) break
+    if (e.type === 'response-emitted' || e.type === 'stimulus-delivered') {
+      if (elapsedSimMs - e.at >= CREATURE_TRIGGER_WINDOW_MS) return null
+      const kind: CreatureTriggerKind =
+        e.type === 'response-emitted' ? 'response' : 'delivery'
+      return { kind, key: `${e.type}-${e.at}` }
+    }
+    if (e.at < elapsedSimMs - CREATURE_TRIGGER_WINDOW_MS) break
+  }
+  return null
+}
 
 const SIMPLE_PHASE_COPY: Record<string, string> = {
   baseline: 'First, watch Pip on their own before training begins.',
@@ -67,6 +105,11 @@ export function TrainingScreen({
     }
     return null
   }, [state.events, state.elapsedSimMs])
+
+  const creatureTrigger = useMemo(
+    () => deriveCreatureTrigger(state.events, state.elapsedSimMs, state.paused),
+    [state.events, state.elapsedSimMs, state.paused],
+  )
 
   const trainingStatus = useMemo(
     () => session.getTrainingStatus(),
@@ -314,6 +357,13 @@ export function TrainingScreen({
         still exists, in the Advanced event table. The recency flag is a
         fixed-width mark so the sentence cannot reflow when it appears.
       */}
+      <div className="creature-display">
+        <Creature
+          moodState={state.creature.moodState}
+          trigger={creatureTrigger}
+        />
+      </div>
+
       <p className="creature-state">
         {state.creature.name} has responded {responseCount}{' '}
         {responseCount === 1 ? 'time' : 'times'} so far. Mood:{' '}

@@ -676,6 +676,110 @@ describe('TrainingScreen', () => {
       ).toBeInTheDocument()
     })
   })
+
+  describe("Pip's visual form", () => {
+    function withRecentEvent(
+      state: SessionState,
+      event: SessionState['events'][number],
+      elapsedSimMs: number,
+    ): SessionState {
+      return { ...state, events: [...state.events, event], elapsedSimMs }
+    }
+
+    it('renders the creature carrying the current mood', () => {
+      const session = baselineSession('creature-mood')
+      const state = session.getSnapshot()
+      const { container } = render(
+        <TrainingScreen state={state} session={session} />,
+      )
+      expect(
+        container.querySelector(`[data-mood="${state.creature.moodState}"]`),
+      ).toBeInTheDocument()
+    })
+
+    it('plays the response flourish right after a response, not once it ages out', () => {
+      const session = crfSession('creature-response-flourish')
+      const base = session.getSnapshot()
+      const recent = withRecentEvent(
+        base,
+        {
+          type: 'response-emitted',
+          at: base.elapsedSimMs - 100,
+          responseId: 'r1',
+        },
+        base.elapsedSimMs,
+      )
+      const { container, rerender } = render(
+        <TrainingScreen state={recent} session={session} />,
+      )
+      expect(
+        container.querySelector('.creature-rig--response'),
+      ).toBeInTheDocument()
+
+      const stale = withRecentEvent(
+        base,
+        {
+          type: 'response-emitted',
+          at: base.elapsedSimMs - 5_000,
+          responseId: 'r1',
+        },
+        base.elapsedSimMs,
+      )
+      rerender(<TrainingScreen state={stale} session={session} />)
+      expect(
+        container.querySelector('.creature-rig--response'),
+      ).not.toBeInTheDocument()
+    })
+
+    it('plays the delivery flourish right after a delivery', () => {
+      const session = crfSession('creature-delivery-flourish')
+      const base = session.getSnapshot()
+      const recent = withRecentEvent(
+        base,
+        {
+          type: 'stimulus-delivered',
+          at: base.elapsedSimMs - 100,
+          stimulusId: 'treat',
+          responseId: null,
+          latencyMs: null,
+          contingency: 'noncontingent',
+          timing: 'no-response',
+          scheduleFidelity: 'not-applicable',
+          schedule: null,
+        },
+        base.elapsedSimMs,
+      )
+      const { container } = render(
+        <TrainingScreen state={recent} session={session} />,
+      )
+      expect(
+        container.querySelector('.creature-rig--delivery'),
+      ).toBeInTheDocument()
+    })
+
+    it('freezes to the static pose while paused, even with a fresh event in the window', () => {
+      const session = crfSession('creature-paused-freeze')
+      const base = { ...session.getSnapshot(), paused: true }
+      const recent = withRecentEvent(
+        base,
+        {
+          type: 'response-emitted',
+          at: base.elapsedSimMs - 50,
+          responseId: 'r1',
+        },
+        base.elapsedSimMs,
+      )
+      const { container } = render(
+        <TrainingScreen state={recent} session={session} />,
+      )
+      expect(
+        container.querySelector('.creature-rig--response'),
+      ).not.toBeInTheDocument()
+      expect(
+        container.querySelector('.creature-rig--delivery'),
+      ).not.toBeInTheDocument()
+    })
+  })
 })
 
 describe('the stopped state is visible where the learner is looking', () => {

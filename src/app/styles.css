@@ -1030,3 +1030,126 @@ details summary:hover {
   border-top: 1px solid var(--paper-edge);
   font-weight: 500;
 }
+
+/* -- Pip (creature/components/Creature.tsx) ----------------------------- */
+
+/*
+ * A fixed multiple of `--rule` so this new block holds the ruled background
+ * in register the same way every other element on the sheet does (see "the
+ * rule is the unit" above `--rule`'s own definition) — four rules is the
+ * smallest step taller than the 88px svg, so the mark stays centered inside
+ * whole rule lines rather than splitting one.
+ */
+.creature-display {
+  display: flex;
+  align-items: center;
+  height: calc(var(--rule) * 4);
+}
+
+/*
+ * Fixed box, always: this renders beside the delivery target, and a box that
+ * changes size has already moved that target under the learner's cursor
+ * once (see the "just responded" comment above `.creature-recency`). Every
+ * rule below animates a transform only.
+ */
+.creature-svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.creature-rig {
+  transform-origin: 100px 128px;
+}
+
+[data-mood='content'] .ear-l {
+  transform: rotate(-10deg);
+}
+[data-mood='content'] .ear-r {
+  transform: rotate(10deg);
+}
+[data-mood='content'] .brow-l {
+  transform: rotate(-10deg);
+}
+[data-mood='content'] .brow-r {
+  transform: rotate(10deg);
+}
+
+[data-mood='disinterested'] .ear-l {
+  transform: rotate(8deg);
+}
+[data-mood='disinterested'] .ear-r {
+  transform: rotate(-8deg);
+}
+[data-mood='disinterested'] .brow-l {
+  transform: rotate(6deg);
+}
+[data-mood='disinterested'] .brow-r {
+  transform: rotate(-6deg);
+}
+
+[data-mood='frustrated'] .ear-l {
+  transform: rotate(14deg);
+}
+[data-mood='frustrated'] .ear-r {
+  transform: rotate(-14deg);
+}
+[data-mood='frustrated'] .brow-l {
+  transform: rotate(16deg);
+}
+[data-mood='frustrated'] .brow-r {
+  transform: rotate(-16deg);
+}
+
+/*
+ * The Earned-Color Rule (DESIGN.md): ballpoint marks something that just
+ * happened, never a standing state, so the flourish is the only place Pip's
+ * line art leaves ink. Scoped to the modifier class rather than gated by a
+ * timer or `animationend` — the class's own lifetime (owned by the caller's
+ * `trigger` prop, derived from simulated-event recency) is the one source of
+ * truth for how long the flash lasts.
+ */
+.creature-rig--response .stroke,
+.creature-rig--response .stroke *,
+.creature-rig--delivery .stroke,
+.creature-rig--delivery .stroke * {
+  stroke: var(--ballpoint);
+}
+.creature-rig--response .fill-ink,
+.creature-rig--delivery .fill-ink {
+  fill: var(--ballpoint);
+}
+
+/* The trained behavior literally is a spin (`TARGET_BEHAVIOR_ID` in
+   src/sim/stimuli.ts), so a completed response plays one. */
+.creature-rig--response {
+  animation: pip-spin 600ms ease-out;
+}
+
+/*
+ * A small receiving settle for a credited delivery: starts lifted, eases
+ * into its resting pose once. Deliberately not an up-then-back-down bounce
+ * — that overshoot reads as a dated mascot tell, and this world's own
+ * motion rule is a single exponential ease-out from an already-visible
+ * default, not a spring.
+ */
+.creature-rig--delivery {
+  animation: pip-deliver-settle 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes pip-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pip-deliver-settle {
+  from {
+    transform: translateY(-6px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}

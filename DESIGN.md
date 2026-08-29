@@ -427,6 +427,35 @@ action, which is exactly what Highlighter Yellow is for. Stamp red stays
 reserved for evidence the event log has earned (see The Earned-Color Rule);
 a pause is not an achievement.
 
+### Pip (signature)
+
+The creature's first rendered form (`src/app/components/Creature.tsx`,
+Training screen only — GitHub issue #15), drawn the same way as everything
+else on the sheet: ink-line strokes, no fill beyond `paper` except the two
+pupil dots, no photographic or illustrated asset. A fixed `88x88` box,
+`viewBox 0 0 200 200`, `aria-hidden` — `.creature-state`'s text already
+carries the name/mood/recency facts, so the mark is decorative, not a
+second source of truth.
+
+- **Mood pose:** `data-mood` (from `creature.moodState`) drives ear and
+  brow rotation via plain CSS `transform`, mirrored left/right. Never a
+  box property — this renders directly above the delivery target, and a
+  box that changes size has already moved that target under a learner's
+  cursor once (see The Stopped State's sibling reserve rule above).
+- **Flourish:** a `response-emitted` event spins Pip once (`pip-spin`,
+  600ms) — the trained behavior literally is a spin
+  (`TARGET_BEHAVIOR_ID`); a `stimulus-delivered` event plays
+  `pip-deliver-settle` (500ms, `cubic-bezier(0.16, 1, 0.3, 1)`), a single
+  lift-into-rest, never an up-then-back-down bounce — bounce/elastic
+  easing reads as a dated mascot tell in this world's restrained motion
+  vocabulary. Triggered by remounting the rig on a `key` derived from the
+  event's own identity, never a timer or `animationend` handler, so there
+  is no animation state that can drift from the event log.
+- **Earned-Color Rule:** ink switches to `ballpoint` only for the
+  flourish's own lifetime — a completed response or delivery is
+  something that just happened, not yet the kind of standing evidence
+  Stamp red is reserved for.
+
 ### Navigation
 None: the product is a single linear flow (assessment → baseline → CRF →
 VR-3 → optional extinction → debrief) with no persistent nav chrome by

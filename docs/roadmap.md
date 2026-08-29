@@ -212,10 +212,15 @@ Tracked as GitHub issues; #2-#8, #12 and #13 were closed by 2.1.2.
   clearly applicable. Resolving it moves `--pencil`/`--paper` globally, so it
   is a product/palette decision, not a defect fix.
 - **#14 No progress indicator** across the four training rounds.
-- **#15 The creature has no visual existence.** The largest gap relative to
-  its position in the queue: every other quality investment in this app
-  competes for attention against the absence of the pet in a pet-training
-  simulation.
+- **#15 The creature has no visual existence.** Partly addressed:
+  `src/app/components/Creature.tsx` gives Pip a first rendered form (the
+  locked "Vantle · G4" design) in the Training screen, mood-posed from
+  `creature.moodState` and flourishing on a `response-emitted`/
+  `stimulus-delivered` event within its own recency window (frozen while
+  `state.paused`, per ADR 0011). The Assessment screen's approach gesture is
+  still open — recording is deliberately not inferred from
+  `creatureSelection` there, so a standing pose risks reading as an answer
+  key, and that needs its own pass rather than reusing this one.
 
 The next critical-path increment is completing Milestone 7's shared
 debrief/session summary. The extinction-round contract is 150 simulated seconds,

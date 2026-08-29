@@ -91,6 +91,7 @@ export type {
   CommandResult,
   CreatureState,
   DebriefSummary,
+  MoodState,
   ReplayResult,
   SchedulePlan,
   SessionState,

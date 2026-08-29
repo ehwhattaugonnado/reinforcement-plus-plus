@@ -180,6 +180,75 @@ test.describe('the fixed control bar below 50rem', () => {
   })
 })
 
+test.describe('the creature next to the delivery target', () => {
+  // The `.creature-state` box already has a documented defect (see the
+  // "reserves its height under every message it can show" test above) where
+  // a change in its own size shifted the delivery target under the
+  // learner's cursor. Pip's SVG sits directly above that box, so the same
+  // failure mode is one escaped rotation away: an ear or brow transform
+  // that pushes geometry outside the fixed viewBox, or a flourish animating
+  // something other than `transform`, would grow the box and shove
+  // everything below it down mid-round.
+  //
+  // Moods and the flourish are driven by simulated events this test would
+  // otherwise have to wait out at the mercy of the seeded RNG. Poking the
+  // attributes directly exercises every state deterministically, the same
+  // way `barAndReserve`'s sibling test above sets `.session-status`'s text
+  // directly instead of triggering every real pause reason.
+  test('never changes size across moods or mid-flourish', async ({ page }) => {
+    await page.goto('/')
+    await completeAssessment(page)
+    await page.getByRole('button', { name: /continue to training/i }).click()
+
+    const svg = page.locator('.creature-svg')
+    const stateBox = page.locator('.creature-state')
+    await expect(svg).toBeVisible()
+
+    const baselineSvgBox = await svg.boundingBox()
+    const baselineStateY = (await stateBox.boundingBox())?.y
+    expect(baselineSvgBox).not.toBeNull()
+    expect(baselineStateY).not.toBeUndefined()
+
+    for (const mood of [
+      'content',
+      'neutral',
+      'disinterested',
+      'frustrated',
+    ] as const) {
+      await page.evaluate((m) => {
+        document.querySelector('.creature-svg')?.setAttribute('data-mood', m)
+      }, mood)
+      const box = await svg.boundingBox()
+      expect(box, `creature svg box changed size in "${mood}" mood`).toEqual(
+        baselineSvgBox,
+      )
+      const stateY = (await stateBox.boundingBox())?.y
+      expect(
+        stateY,
+        `creature-state moved when Pip's mood became "${mood}"`,
+      ).toBe(baselineStateY)
+    }
+
+    // Force the flourish's modifier class on, mid-animation, rather than
+    // waiting for a real response event.
+    await page.evaluate(() => {
+      document
+        .querySelector('.creature-rig')
+        ?.classList.add('creature-rig--response')
+    })
+    const midFlourishBox = await svg.boundingBox()
+    expect(
+      midFlourishBox,
+      'creature svg box changed size mid-flourish',
+    ).toEqual(baselineSvgBox)
+    const midFlourishStateY = (await stateBox.boundingBox())?.y
+    expect(
+      midFlourishStateY,
+      'creature-state moved while the flourish animation was playing',
+    ).toBe(baselineStateY)
+  })
+})
+
 test.describe('focus order', () => {
   // One test per width rather than a loop over one page: a Tab press depends
   // on which element the page last focused, so each width needs a document
