@@ -941,7 +941,7 @@ details summary:hover {
   }
 
   .session-controls label {
-    font-size: 0.82rem;
+    font-size: 0.75rem;
     gap: 0.25rem;
   }
 
@@ -999,15 +999,19 @@ details summary:hover {
  * The explanation shown beside a preference hierarchy that contains a tie.
  * Marginal note voice: the annotation a supervisor pencils beside a data
  * sheet, not a finding the event log has stamped. Sits on the rule grid.
+ *
+ * Set by indent and the data voice, not by a rule down its side: this system
+ * shipped a border-left accent once, the detector flagged it, and DESIGN.md
+ * now bans the pattern outright.
  */
 .hierarchy-tie-note {
   font-family: var(--font-data);
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: var(--ink-soft);
   max-width: 62ch;
   margin: calc(var(--rule) * 0.5) 0 0;
-  padding-left: 0.75rem;
-  border-left: 2px solid var(--paper-edge);
+  padding-left: 1rem;
+  text-indent: -1rem;
 }
 
 /*
