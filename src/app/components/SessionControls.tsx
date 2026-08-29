@@ -83,8 +83,7 @@ export function SessionControls({
         {state.speed}&times; speed.
       </p>
       <p className="session-elapsed">
-        {elapsedSeconds} {elapsedSeconds === 1 ? 'second' : 'seconds'} elapsed
-        in this session.
+        {elapsedSeconds} {elapsedSeconds === 1 ? 'second' : 'seconds'} elapsed.
       </p>
     </div>
   )

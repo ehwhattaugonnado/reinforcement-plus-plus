@@ -40,14 +40,6 @@ export function AppShell({ seed }: { seed?: string } = {}) {
         </p>
       </header>
 
-      <SessionControls
-        state={state}
-        session={session}
-        mode={mode}
-        onModeChange={setMode}
-        pauseReason={pauseReason}
-      />
-
       <main>
         {state.phase === 'assessment' ? (
           <AssessmentScreen state={state} session={session} />
@@ -69,6 +61,23 @@ export function AppShell({ seed }: { seed?: string } = {}) {
           </>
         )}
       </main>
+
+      {/*
+       * After `<main>` in the DOM, positioned by `grid-area` (the sheet's
+       * margin at >=50rem, a fixed bar below it). Rendered first, the Pause
+       * button was the document's first focusable element on every screen,
+       * so one Tab from a cold start landed on it and Space stopped a
+       * session the learner had not begun — a third path to an unintended
+       * stop, on a product that already pauses itself. Focus order now
+       * follows reading order: heading, then the task, then the controls.
+       */}
+      <SessionControls
+        state={state}
+        session={session}
+        mode={mode}
+        onModeChange={setMode}
+        pauseReason={pauseReason}
+      />
     </div>
   )
 }

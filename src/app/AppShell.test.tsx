@@ -56,11 +56,22 @@ describe('AppShell', () => {
     ).toBeInTheDocument()
   })
 
-  it('is operable by keyboard alone', async () => {
+  it('is operable by keyboard alone, reaching the task before the controls', async () => {
     const user = userEvent.setup()
     render(<AppShell seed="shell-test" />)
+
+    // Focus order follows reading order. The control margin used to come
+    // first in the DOM, so one Tab from a cold start landed on Pause and
+    // Space stopped a session the learner had not begun.
     await user.tab()
-    expect(screen.getByRole('button', { name: /pause/i })).toHaveFocus()
+    expect(
+      screen.getByRole('button', { name: /show next pair/i }),
+    ).toHaveFocus()
+
+    // Pause is still reachable and operable from the keyboard, just not
+    // ahead of the work.
+    const pause = screen.getByRole('button', { name: /pause/i })
+    pause.focus()
     await user.keyboard('{Enter}')
     expect(sessionStatus()).toHaveTextContent(/paused/i)
   })

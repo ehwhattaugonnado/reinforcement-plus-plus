@@ -40,10 +40,20 @@ test('pause and speed are operable and announced textually', async ({
   await expect(sessionStatus(page)).toContainText('0.5')
 })
 
-test('the shell is keyboard operable', async ({ page }) => {
+test('the shell is keyboard operable, reaching the task before the controls', async ({
+  page,
+}) => {
   await page.goto('/')
+
+  // Reading order, not control-panel-first: the control margin sits after
+  // <main> in the DOM so a single Tab from a cold start cannot stop a
+  // session the learner has not begun.
   await page.keyboard.press('Tab')
-  await expect(page.getByRole('button', { name: /pause/i })).toBeFocused()
+  await expect(
+    page.getByRole('button', { name: /show next pair/i }),
+  ).toBeFocused()
+
+  await page.getByRole('button', { name: /pause/i }).focus()
   await page.keyboard.press('Enter')
   await expect(sessionStatus(page)).toContainText(/paused/i)
 })
