@@ -6,6 +6,7 @@ import {
   type SimSession,
   type StimulusId,
 } from '../../sim'
+import { rankLabel, tieNote, tiedRanks } from './hierarchy'
 
 /**
  * Phase A: paired-stimulus preference assessment (Core Loop, Phase A).
@@ -42,6 +43,13 @@ export function AssessmentScreen({
     () => deriveAssessmentSummary(state.events),
     [state.events],
   )
+  // A shared rank is correct (competition ranking on shared selection
+  // counts), but a bare "1, 1, 3, 3" reads as a defect. Say the tie.
+  const tiedHierarchyRanks = useMemo(
+    () => tiedRanks(summary.hierarchy),
+    [summary.hierarchy],
+  )
+  const hierarchyTieNote = tieNote(summary.hierarchy, creature.name)
 
   const presentNext = () => {
     if (!canPresent) return
@@ -60,7 +68,7 @@ export function AssessmentScreen({
         {creature.name} is offered two things, one pair at a time. Watch what{' '}
         {creature.name} does, then record what you saw. This builds a{' '}
         <strong>preference hierarchy</strong> of {creature.name}&rsquo;s
-        preferred stimuli -- candidate (putative) reinforcers we can test later,
+        preferred stimuli — candidate (putative) reinforcers we can test later,
         once we see them actually change behavior.
       </p>
 
@@ -173,7 +181,7 @@ export function AssessmentScreen({
             Ranked by how often {creature.name} chose each item across the{' '}
             {assessment.plannedPairs.length} trials. Items are described as{' '}
             <strong>preferred stimuli</strong> or{' '}
-            <strong>candidate (putative) reinforcers</strong> -- none of them is
+            <strong>candidate (putative) reinforcers</strong> — none of them is
             called a reinforcer yet. That claim is only earned later, once
             delivering one is shown to actually increase {creature.name}
             &rsquo;s behavior above baseline.
@@ -201,7 +209,7 @@ export function AssessmentScreen({
               <tbody>
                 {summary.hierarchy.map((row) => (
                   <tr key={row.stimulusId}>
-                    <td>{row.rank}</td>
+                    <td>{rankLabel(row.rank, tiedHierarchyRanks)}</td>
                     <td>{STIMULUS_LABELS[row.stimulusId as StimulusId]}</td>
                     <td>{row.timesSelected}</td>
                     <td>{row.timesPresented}</td>
@@ -211,6 +219,9 @@ export function AssessmentScreen({
               </tbody>
             </table>
           </div>
+          {hierarchyTieNote !== null && (
+            <p className="hierarchy-tie-note">{hierarchyTieNote}</p>
+          )}
 
           <p role="status">
             {summary.recordingAccuracy.accuracy === null

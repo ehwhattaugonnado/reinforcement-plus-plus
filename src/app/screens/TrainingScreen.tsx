@@ -14,6 +14,7 @@ import {
 } from '../charts'
 import type { Mode } from '../hooks/useMode'
 import type { PauseReason } from '../hooks/useSimState'
+import { rankLabel, tieNote, tiedRanks } from './hierarchy'
 import { COACHING_COPY, deriveCrfCoaching, deriveVrCoaching } from './coaching'
 
 const SIMPLE_PHASE_COPY: Record<string, string> = {
@@ -136,7 +137,7 @@ export function TrainingScreen({
     }
     if (lastDelivery !== undefined) {
       if (lastDelivery.contingency === 'noncontingent') {
-        return 'Delivered with no response to credit it to -- noncontingent.'
+        return 'Delivered with no response to credit it to — noncontingent.'
       }
       const timingText =
         lastDelivery.timing === 'prompt'
@@ -151,7 +152,7 @@ export function TrainingScreen({
       return `Delivered ${timingText}, ${fidelityText}.`
     }
     if (outstandingCycle !== null) {
-      return `Reinforcement is due -- ${state.creature.name} just met the criterion. Deliver now.`
+      return `Reinforcement is due — ${state.creature.name} just met the criterion. Deliver now.`
     }
     return `Waiting for ${state.creature.name} to respond.`
   })()
@@ -216,7 +217,7 @@ export function TrainingScreen({
     }
     if (lastDelivery !== undefined) {
       if (lastDelivery.contingency === 'noncontingent') {
-        return 'Delivered with no response to credit it to -- noncontingent.'
+        return 'Delivered with no response to credit it to — noncontingent.'
       }
       const timingText =
         lastDelivery.timing === 'prompt'
@@ -356,6 +357,7 @@ export function TrainingScreen({
             selected={selectedStimulusId}
             onSelect={setSelectedStimulusId}
             hierarchy={preferenceOrder}
+            creatureName={state.creature.name}
           />
           <button type="button" onClick={() => void session.startRound('crf')}>
             {mode === 'simple' ? 'Start training' : 'Start CRF acquisition'}
@@ -382,6 +384,7 @@ export function TrainingScreen({
             selected={selectedStimulusId}
             onSelect={setSelectedStimulusId}
             hierarchy={preferenceOrder}
+            creatureName={state.creature.name}
           />
 
           <p role="status" className="crf-status">
@@ -459,6 +462,7 @@ export function TrainingScreen({
             selected={selectedStimulusId}
             onSelect={setSelectedStimulusId}
             hierarchy={preferenceOrder}
+            creatureName={state.creature.name}
           />
 
           <p role="status" className="vr-status">
@@ -695,12 +699,20 @@ function StimulusPicker({
   selected,
   onSelect,
   hierarchy,
+  creatureName,
 }: {
   name: string
   selected: StimulusId
   onSelect: (id: StimulusId) => void
   hierarchy: readonly { readonly stimulusId: string; readonly rank: number }[]
+  creatureName: string
 }) {
+  // Competition ranking shares a rank on equal selection counts, which makes
+  // the sequence skip (1, 1, 3, 3). Naming the tie keeps the hierarchy from
+  // reading as a defect to someone learning to read one.
+  const tied = tiedRanks(hierarchy)
+  const note = tieNote(hierarchy, creatureName)
+
   return (
     <fieldset>
       <legend>What to deliver</legend>
@@ -715,11 +727,12 @@ function StimulusPicker({
                 checked={selected === id}
                 onChange={() => onSelect(id)}
               />
-              Rank {row.rank}: {STIMULUS_LABELS[id]}
+              Rank {rankLabel(row.rank, tied)}: {STIMULUS_LABELS[id]}
             </label>
           )
         })}
       </div>
+      {note !== null && <p className="hierarchy-tie-note">{note}</p>}
     </fieldset>
   )
 }

@@ -16,7 +16,8 @@
   --flag: #e8b93a; /* highlighter yellow — attention, "due now" */
   --flag-ink: #4a3a0a; /* text set on top of a flag highlight */
   --ballpoint: #2f4f8f; /* primary action, selection, focus */
-  --ballpoint-deep: #22396b; /* pressed / hover-deepened ballpoint */
+  --ballpoint-deep: #22396b; /* pressed / hover fill: ballpoint at higher contrast against the ground */
+  --ballpoint-shadow: #22396b; /* the hard shadow under a stamped control: always darker than the face */
   --stamp: #a4372a; /* rubber accession stamp — earned status only */
 
   --shadow-color: 32 36 42;
@@ -57,6 +58,7 @@
     --flag-ink: #2a2005;
     --ballpoint: #86a4e8;
     --ballpoint-deep: #b3c6f2;
+    --ballpoint-shadow: #0b1730;
     --stamp: #d9705d;
     --shadow-color: 0 0 0;
     color-scheme: dark;
@@ -164,7 +166,9 @@ p {
 .vr-round > h3,
 .extinction-round > h3 {
   display: inline-block;
-  padding: 0.3rem 0.75rem;
+  /* The -1.25deg rotation swings the last glyph toward the right border, so
+     that side carries extra padding to keep the stamp off its own edge. */
+  padding: 0.3rem 1rem 0.3rem 0.75rem;
   border: 2px solid var(--ballpoint);
   border-radius: 0.3rem;
   transform: rotate(-1.25deg);
@@ -287,6 +291,12 @@ input[type='checkbox'] {
   margin: 0 0 0.4rem;
 }
 
+/*
+ * The wordmark's mark is drawn in ballpoint, not stamp red. Stamp red is
+ * reserved for evidence the event log has actually earned (DESIGN.md,
+ * Earned-Color Rule); letterhead is present from first paint, before a
+ * single event exists, so it cannot spend that signal.
+ */
 .app-shell > header h1::after {
   content: '';
   display: inline-block;
@@ -295,7 +305,7 @@ input[type='checkbox'] {
   margin-left: 0.4em;
   vertical-align: middle;
   border-radius: 50%;
-  background: var(--stamp);
+  background: var(--ballpoint);
 }
 
 .boundary-note {
@@ -455,7 +465,7 @@ legend {
   outline: 2px solid var(--ballpoint);
   outline-offset: -2px;
   border-radius: 0.5rem;
-  box-shadow: 0 4px 0 var(--ballpoint-deep);
+  box-shadow: 0 4px 0 var(--ballpoint-shadow);
   margin: 1rem 0 0.35rem;
 }
 
@@ -465,7 +475,7 @@ legend {
 
 .delivery-target:active {
   transform: translateY(3px);
-  box-shadow: 0 1px 0 var(--ballpoint-deep);
+  box-shadow: 0 1px 0 var(--ballpoint-shadow);
 }
 
 .crf-shortcut-hint {
@@ -899,4 +909,19 @@ details summary:hover {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/*
+ * The explanation shown beside a preference hierarchy that contains a tie.
+ * Marginal note voice: the annotation a supervisor pencils beside a data
+ * sheet, not a finding the event log has stamped. Sits on the rule grid.
+ */
+.hierarchy-tie-note {
+  font-family: var(--font-data);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  max-width: 62ch;
+  margin: calc(var(--rule) * 0.5) 0 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--paper-edge);
 }
