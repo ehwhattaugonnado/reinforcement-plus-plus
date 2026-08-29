@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { expectNoAxeViolations } from '../../../tests/setup/axe'
 import { buildResponseRateChartData } from '../../sim'
 import { EMPTY_LOG, FULL_SESSION_LOG } from '../../sim/chart-fixtures'
+import { CHART_MARGIN, CHART_VIEWBOX_WIDTH } from './format'
 import { ResponseRateChart } from './ResponseRateChart'
 
 describe('ResponseRateChart', () => {
@@ -66,5 +67,44 @@ describe('ResponseRateChart', () => {
     const data = buildResponseRateChartData(EMPTY_LOG)
     const { container } = render(<ResponseRateChart data={data} />)
     await expectNoAxeViolations(container)
+  })
+
+  it('uses the same viewBox width and horizontal margins as the other chart', () => {
+    // Identical viewBox width + identical left/right margins are what make
+    // the two charts scale by the same factor at a shared container width:
+    // their plot areas line up and their tick text renders at one size.
+    const data = buildResponseRateChartData(FULL_SESSION_LOG)
+    const { container } = render(<ResponseRateChart data={data} />)
+    const svg = container.querySelector('svg')!
+    expect(svg.getAttribute('viewBox')!.split(' ')[2]).toBe(
+      String(CHART_VIEWBOX_WIDTH),
+    )
+    expect(
+      container.querySelector('svg > .visx-group')!.getAttribute('transform'),
+    ).toBe(`translate(${CHART_MARGIN.left}, ${CHART_MARGIN.top})`)
+  })
+
+  it('keeps both axis labels inside the clipping viewBox', () => {
+    const data = buildResponseRateChartData(FULL_SESSION_LOG)
+    const { container } = render(<ResponseRateChart data={data} />)
+    const viewBoxHeight = Number(
+      container.querySelector('svg')!.getAttribute('viewBox')!.split(' ')[3],
+    )
+
+    const left = container.querySelector('.visx-axis-left .visx-axis-label')!
+    expect(Number(left.getAttribute('y'))).toBeGreaterThan(-CHART_MARGIN.left)
+
+    const bottomAxis = container.querySelector('.visx-axis-bottom')!
+    const axisTop = Number(
+      /translate\(0, ([\d.]+)\)/.exec(
+        bottomAxis.getAttribute('transform') ?? '',
+      )?.[1],
+    )
+    const bottomLabelY = Number(
+      bottomAxis.querySelector('.visx-axis-label')!.getAttribute('y'),
+    )
+    expect(CHART_MARGIN.top + axisTop + bottomLabelY).toBeLessThan(
+      viewBoxHeight,
+    )
   })
 })

@@ -20,11 +20,17 @@ const TRAINING_PHASES = new Set(['baseline', 'crf', 'vr', 'extinction'])
  * that actually changed (Accessibility, "Perception").
  */
 export function AppShell({ seed }: { seed?: string } = {}) {
-  const { state, session } = useSimState(seed)
+  const { state, session, pauseReason } = useSimState(seed)
   const [mode, setMode] = useMode()
 
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      // The sheet itself carries the stopped state, so a pause is legible
+      // from anywhere on the page rather than only from the control margin
+      // — which scrolls out of view entirely below the 50rem breakpoint.
+      data-paused={state.paused ? '' : undefined}
+    >
       <header>
         <h1>Reinforcement++</h1>
         <p className="boundary-note">
@@ -39,6 +45,7 @@ export function AppShell({ seed }: { seed?: string } = {}) {
         session={session}
         mode={mode}
         onModeChange={setMode}
+        pauseReason={pauseReason}
       />
 
       <main>
@@ -47,7 +54,12 @@ export function AppShell({ seed }: { seed?: string } = {}) {
         ) : state.phase === 'debrief' ? (
           <DebriefScreen state={state} session={session} mode={mode} />
         ) : TRAINING_PHASES.has(state.phase) ? (
-          <TrainingScreen state={state} session={session} mode={mode} />
+          <TrainingScreen
+            state={state}
+            session={session}
+            mode={mode}
+            pauseReason={pauseReason}
+          />
         ) : (
           <>
             <h2>Session</h2>

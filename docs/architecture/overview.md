@@ -77,13 +77,24 @@ not the intended architecture. Configured core projectors or snapshot fields
 should supply those display facts while the shell continues to create sessions
 with defaults.
 
+The `useSimState` bridge throttles *rendering*, never the clock: the core
+still advances on every animation frame, but the hook collapses the snapshot
+to a presentation quantum (`RENDER_QUANTUM_MS`) and returns the cached
+snapshot in between, so React reconciles a few times a second instead of
+sixty. `elapsedSimMs` keeps full precision inside the core, commands read
+live state, and no simulated timing window is affected (ADR 0005).
+
 Browser visibility changes automatically pause the controlled simulation
 clock. `tick` receives elapsed wall-clock time; the core caps unexpected
 deltas and applies the selected speed to produce simulated time. Returning to
 a backgrounded tab therefore cannot silently advance an entire round.
 Reaching `crfCoachingPauseMs` or `vrCoachingPauseMs` without the corresponding
 gate also appends one automatic `paused` event; each coaching pause fires at
-most once per round and the learner explicitly resumes.
+most once per round and the learner explicitly resumes. Because the session
+can therefore stop without being asked, the shell surfaces *why* it stopped
+(`PauseReason`) and offers an in-round resume; the reason is presentation
+state and never reaches the core. While paused, every log-mutating command
+is rejected (ADR 0011).
 
 The UI owns `mode: 'simple' | 'advanced'`; mode never changes sim behavior.
 Accessibility speed is different: it is an explicit sim input because it

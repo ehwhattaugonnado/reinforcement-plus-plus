@@ -36,7 +36,7 @@ typography:
     fontFamily: "'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: '1rem'
     fontWeight: 400
-    lineHeight: 1.55
+    lineHeight: '1.7rem'
     letterSpacing: 'normal'
   caption:
     fontFamily: "'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace"
@@ -57,6 +57,7 @@ rounded:
   lg: '0.5rem'
   full: '999px'
 spacing:
+  rule: '1.7rem'
   xs: '0.5rem'
   sm: '0.75rem'
   md: '1rem'
@@ -246,9 +247,22 @@ controls into the vertical scroll of the trial content itself.
   edge-to-edge (the clipboard fills the viewport rather than floating on a
   desk), and the delivery-target/round-action buttons go full width.
 
-Vertical rhythm follows the ruled background: section spacing (`h2`
-margin-top `2rem`, `h3` margin-top `1.75rem`) is a multiple of the rule
-spacing so headings land on a line rather than between two.
+**The Rule Is The Unit.** `--rule: 1.7rem` (27.2px) is the sheet's single
+vertical unit. The ruled background paints one line every `--rule`, the body
+line box *is* `--rule`, and every heading margin is a whole multiple of it
+(`h2` `calc(--rule * 2)` above, `h3`/`h4` one). Consecutive lines of body
+text therefore advance exactly one rule and stay parallel to the ruling
+instead of walking across it.
+
+This replaced a version where the claim was made but not implemented: the
+sheet ruled every `1.7rem` while the body line box was `1.55 x 16px =
+24.8px`, so each line landed 2.4px further off than the last, `h2`'s `2rem`
+margin was 1.176 rules and `h3`'s `1.75rem` was 1.029, and no element in the
+product ever touched a rule. The metaphor was decorative rather than
+structural. Per-line drift is now zero; a section's *phase* against the
+ruling can still be non-zero, because panel padding and chart heights are
+not yet quantised to the unit — that is the remaining half of the work, not
+a claim this file should make in advance.
 
 ## Elevation & Depth
 
@@ -362,6 +376,35 @@ justification beyond habit.
   reading as the physical clip holding the sheet to a board. No image
   asset.
 
+### The Stopped State (signature)
+
+The session can stop *without being asked* — a backgrounded tab, or one of
+the two automatic coaching checkpoints — so a stop has to read from the
+trial content, not only from the control margin, which goes `position:
+static` below `50rem` and sits several hundred pixels above the viewport
+during a round.
+
+- **`.paused-notice`:** a Status Field variant carrying the highlighter wash,
+  a rotated `PAUSED` stamp mark (`::before`, the same device as the Stamped
+  Condition Header), the reason for the stop in words, and an in-round
+  `Resume session` button. Renders nothing while running.
+- **`.app-shell[data-paused] > main`:** `filter: grayscale(0.9)`. The sheet
+  is near-monochrome already, so the one thing this actually drains is the
+  single saturated element in the trial area — the delivery target — which
+  is precisely the control that has stopped working. Luminance is preserved,
+  so text contrast is unaffected. Scoped to `main` rather than the shell
+  because a filter creates a containing block and would break the control
+  margin's `position: sticky`.
+- **`.delivery-target[aria-disabled='true']`:** paper-deep fill, soft ink,
+  pencil outline — the documented disabled treatment, not an opacity fade.
+- **`.session-pause[aria-pressed='true']`:** the highlighter wash, so the
+  standing toggle carries the state and not only its own label.
+
+**Why the flag and not the stamp.** A stop is an attention state needing
+action, which is exactly what Highlighter Yellow is for. Stamp red stays
+reserved for evidence the event log has earned (see The Earned-Color Rule);
+a pause is not an achievement.
+
 ### Navigation
 None: the product is a single linear flow (assessment → baseline → CRF →
 VR-3 → optional extinction → debrief) with no persistent nav chrome by
@@ -411,7 +454,28 @@ Field variant, not a nav bar.
 - **Don't** theme the visx charts (`src/app/charts/*.tsx`) directly; they
   already draw in `currentColor` and inherit from `.chart`'s CSS. New
   chart styling belongs in `styles.css`, never in the chart components
-  themselves (ADR 0007 keeps visx behind one file per chart).
+  themselves (ADR 0007 keeps visx behind one file per chart). Chart
+  *geometry* — viewBox, margins, scales, tick counts and domains — is the
+  components' own business and lives in `src/app/charts/format.ts`, shared
+  by both charts so they cannot drift apart again. They previously carried
+  different viewBox widths (480 vs 420) and different left margins, so at
+  one container width they rendered at two different scale factors: plot
+  edges 19.6px apart and axis text at two different on-screen sizes on the
+  same sheet. Both now share one viewBox width and one margin set.
+- **Don't** let a live chart's domain track the clock continuously. The
+  cumulative record's x-domain is rounded up to a step ladder (10s, 20s,
+  30s, 1m, 2m…) so ticks land on round times and the plot advances in
+  discrete steps. Bound to raw `elapsedSimMs` it rescaled every animation
+  frame, drifting every mark and tick ~10px/second, permanently.
+
+  **Known residual:** because the SVG is `width: 100%` over a fixed viewBox,
+  axis text scales with the container — 14.25px at 1440px, 6.23px at 375px.
+  Unifying the viewBox made the two charts consistent but not legible on a
+  phone. No CSS `font-size` can fix this (SVG text is in viewBox units and
+  scales identically); the real fix is a container-driven viewBox, which is
+  a feature, not a tweak. Until then the accessible path carries it: every
+  chart is `aria-hidden` decoration over a text summary and a data table
+  derived from the same chart-data object.
 - **Don't** revert the neutral palette to a warm kraft/brown cast. This
   system shipped that once, the product owner rejected it on sight, and it
   was replaced with the true-white family above.

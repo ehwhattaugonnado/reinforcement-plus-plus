@@ -108,6 +108,19 @@ export function createSession(
     state = { ...state, elapsedSimMs: state.elapsedSimMs + simDtMs }
   }
 
+  /**
+   * The paused guard shared by every log-mutating command (ADR 0011). While
+   * paused the clock is frozen and no responses are emitted, so an appended
+   * event would be timestamped and classified against a stopped clock. Only
+   * `setPaused` and `setSpeed` are exempt, and `tick` keeps accepting a paused
+   * call with an empty event list (ADR 0008, as amended).
+   */
+  function pausedRejection(command: string): CommandResult | null {
+    return state.paused
+      ? reject('session-paused', `${command} while paused`)
+      : null
+  }
+
   commit([
     { type: 'session-started', at: 0, seed, speed, configVersion },
     { type: 'phase-changed', at: 0, phase: 'assessment' },
@@ -395,6 +408,8 @@ export function createSession(
     },
 
     startRound(round) {
+      const paused = pausedRejection('startRound')
+      if (paused !== null) return paused
       const allowed = ROUND_PREREQUISITE[round]
       if (allowed === undefined) {
         return reject('invalid-argument', `round=${String(round)}`)
@@ -464,6 +479,8 @@ export function createSession(
     },
 
     finishSession() {
+      const paused = pausedRejection('finishSession')
+      if (paused !== null) return paused
       if (state.phase === 'vr') {
         if (vrCyclesCompleted(state.events) < config.vrCyclesToComplete) {
           return reject(
@@ -495,6 +512,8 @@ export function createSession(
     },
 
     presentNextPair() {
+      const paused = pausedRejection('presentNextPair')
+      if (paused !== null) return paused
       if (state.phase !== 'assessment') {
         return reject('wrong-phase', `in ${state.phase}`)
       }
@@ -537,6 +556,8 @@ export function createSession(
     },
 
     recordObservedSelection(stimulusId) {
+      const paused = pausedRejection('recordObservedSelection')
+      if (paused !== null) return paused
       if (state.phase !== 'assessment') {
         return reject('wrong-phase', `in ${state.phase}`)
       }
@@ -556,6 +577,12 @@ export function createSession(
     },
 
     deliverStimulus(stimulusId) {
+      // Checked before the id and phase so a paused delivery is never
+      // classified: with the clock frozen there is no recent response to be
+      // contingent on, and the delivery would count permanently against the
+      // learner for a stop they may not have caused (ADR 0011).
+      const paused = pausedRejection('deliverStimulus')
+      if (paused !== null) return paused
       if (!isStimulusId(stimulusId))
         return reject('unknown-stimulus', stimulusId)
       if (state.phase !== 'crf' && state.phase !== 'vr') {

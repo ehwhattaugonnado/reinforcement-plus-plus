@@ -8,7 +8,32 @@ import {
   cumulativeRecordSummaryText,
   type CumulativeRecordChartData,
 } from '../../sim'
-import { formatSimTime } from './format'
+import {
+  AXIS_BOTTOM_LABEL_OFFSET,
+  AXIS_LEFT_LABEL_OFFSET,
+  CHART_MARGIN,
+  CHART_VIEWBOX_WIDTH,
+  formatSimTime,
+  wholeStepTicks,
+} from './format'
+
+/**
+ * Live rounds grow `extentMs` every frame. Rounding the drawn x-domain up to
+ * the next whole step keeps the axis stationary between steps.
+ */
+const X_DOMAIN_STEP_MS = 10_000
+
+/**
+ * Preferred x tick spacings, in `X_DOMAIN_STEP_MS` units: 10s, 20s, 30s, 1m,
+ * 2m, 5m, 10m, 20m. Keeps a long session's labels on round times instead of
+ * an exact-but-arbitrary division like 5:10.
+ */
+const X_TICK_STEP_LADDER = [1, 2, 3, 6, 12, 30, 60, 120]
+
+function quantizeExtentMs(extentMs: number): number {
+  const steps = Math.max(1, Math.ceil(extentMs / X_DOMAIN_STEP_MS))
+  return steps * X_DOMAIN_STEP_MS
+}
 
 /**
  * Renders the cumulative response record: simulated time on x, cumulative
@@ -24,19 +49,22 @@ import { formatSimTime } from './format'
 export function CumulativeRecordChart({
   data,
   title = 'Cumulative response record',
-  width = 480,
-  height = 240,
+  width = CHART_VIEWBOX_WIDTH,
+  height = 260,
 }: {
   data: CumulativeRecordChartData
   title?: string
   width?: number
   height?: number
 }) {
-  const margin = { top: 16, right: 16, bottom: 32, left: 40 }
+  const margin = { ...CHART_MARGIN, top: 16 }
   const innerWidth = Math.max(0, width - margin.left - margin.right)
   const innerHeight = Math.max(0, height - margin.top - margin.bottom)
 
-  const maxAtMs = Math.max(data.extentMs, 1)
+  // The x-domain is quantised to whole `X_DOMAIN_STEP_MS` buckets so a live
+  // round advances the axis in discrete jumps instead of rescaling on every
+  // animation frame (which made every tick drift leftwards continuously).
+  const maxAtMs = quantizeExtentMs(data.extentMs)
   const maxCumulative = Math.max(
     ...data.points.map((p) => p.cumulativeResponses),
     1,
@@ -50,6 +78,14 @@ export function CumulativeRecordChart({
     domain: [0, maxCumulative],
     range: [innerHeight, 0],
   })
+  const xTickValues = wholeStepTicks(
+    maxAtMs,
+    X_DOMAIN_STEP_MS,
+    X_TICK_STEP_LADDER,
+  )
+  // A cumulative count of discrete events: ticks must be whole responses,
+  // never d3's default 0.2/0.4/0.6/0.8 on a one-response domain.
+  const yTickValues = wholeStepTicks(maxCumulative, 1)
 
   const stepPoints = toStepPath(data)
   const deliveries = data.annotations.filter((a) => a.kind === 'delivery')
@@ -71,13 +107,20 @@ export function CumulativeRecordChart({
         aria-hidden="true"
       >
         <Group left={margin.left} top={margin.top}>
-          <AxisLeft scale={yScale} label="Cumulative responses" numTicks={4} />
+          <AxisLeft
+            scale={yScale}
+            label="Cumulative responses"
+            labelOffset={AXIS_LEFT_LABEL_OFFSET}
+            tickValues={yTickValues}
+            tickFormat={(v) => String(Math.round(Number(v)))}
+          />
           <AxisBottom
             top={innerHeight}
             scale={xScale}
             label="Simulated time"
+            labelOffset={AXIS_BOTTOM_LABEL_OFFSET}
             tickFormat={(v) => formatSimTime(Number(v))}
-            numTicks={4}
+            tickValues={xTickValues}
           />
           <LinePath
             data={stepPoints}

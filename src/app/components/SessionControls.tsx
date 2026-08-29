@@ -1,5 +1,13 @@
 import type { SimSession, SessionState } from '../../sim'
 import type { Mode } from '../hooks/useMode'
+import type { PauseReason } from '../hooks/useSimState'
+
+/** What stopped the session, in the learner's words. */
+const PAUSE_REASON_TEXT: Record<PauseReason, string> = {
+  away: 'Paused because you left this tab.',
+  coaching: 'Paused for a coaching checkpoint.',
+  user: 'Paused.',
+}
 
 /**
  * Timing and presentation controls. These stay available in every phase so a
@@ -13,16 +21,21 @@ export function SessionControls({
   session,
   mode,
   onModeChange,
+  pauseReason,
 }: {
   state: SessionState
   session: SimSession
   mode: Mode
   onModeChange: (mode: Mode) => void
+  pauseReason?: PauseReason | null | undefined
 }) {
+  const elapsedSeconds = Math.round(state.elapsedSimMs / 1000)
+
   return (
     <div className="session-controls">
       <button
         type="button"
+        className="session-pause"
         onClick={() => void session.setPaused(!state.paused)}
         aria-pressed={state.paused}
       >
@@ -60,12 +73,18 @@ export function SessionControls({
       </fieldset>
 
       {/* Only command-driven state belongs in the live region. Elapsed time is
-          deliberately separate so the clock cannot announce every second. */}
+          deliberately separate so the clock cannot announce every second.
+
+          The session can stop without the learner asking (a backgrounded tab,
+          a coaching checkpoint), so this names the cause rather than only the
+          state — "Paused." alone leaves them to work out what they did. */}
       <p role="status" className="session-status">
-        {state.paused ? 'Paused.' : 'Running.'} {state.speed}&times; speed.
+        {state.paused ? PAUSE_REASON_TEXT[pauseReason ?? 'user'] : 'Running.'}{' '}
+        {state.speed}&times; speed.
       </p>
       <p className="session-elapsed">
-        {Math.round(state.elapsedSimMs / 1000)} seconds elapsed in this session.
+        {elapsedSeconds} {elapsedSeconds === 1 ? 'second' : 'seconds'} elapsed
+        in this session.
       </p>
     </div>
   )

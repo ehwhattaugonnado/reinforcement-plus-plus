@@ -1,6 +1,6 @@
 # Accessibility Requirements
 
-**Implementation status (2026-08-28):** The current shell, session controls,
+**Implementation status (2026-08-29):** The current shell, session controls,
 assessment, baseline screen, CRF training (delivery target, keyboard
 shortcut, status announcements), and Advanced-mode live views (charts plus an
 accessible event table), and VR delivery/history flow include keyboard and
@@ -10,6 +10,32 @@ coverage. Extinction completion and the basic shared debrief have keyboard and
 text output; comprehensive debrief navigation, reduced-motion E2E coverage,
 touch review, screen-reader review, and color/contrast review remain release
 work.
+
+The 2026-08-29 UI/UX defect pass (`docs/roadmap.md` §2.1.1) closed three
+accessibility-relevant defects, each verified in Chromium at 1440px and
+375px with zero axe violations running and paused:
+
+- **A stopped session is now perceivable from the trial content.** Pausing
+  previously changed only a button label, an `aria-pressed` value, and one
+  sentence, all inside a control margin that is `position: static` below
+  50rem and measured 148–671px above the viewport during a round. The
+  session can pause *itself* (a backgrounded tab, or either coaching
+  checkpoint), so this was a state change with no perceivable signal where
+  the learner was working. The sheet now carries `data-paused` and an
+  in-round notice names the cause and offers an explicit resume.
+- **Layout stability at the moment of interaction.** The delivery target
+  moved 24.8px, four times per 25 seconds, as the 1.5s prompt window opened
+  — a target moving under the pointer at the instant it must be hit. Now
+  measured stable across 60 samples at both widths.
+- **Scrollable table regions are keyboard reachable.** `.table-scroll`
+  wrappers carry `tabIndex`, a group role, and a name (axe
+  `scrollable-region-focusable`, WCAG 2.1.1).
+
+Known residual: chart axis text scales with its container (14.25px at
+1440px, 6.23px at 375px). The charts are `aria-hidden` decoration over a
+text summary and data table derived from the same chart-data object, so no
+information is lost; legibility on small viewports needs a container-driven
+viewBox and is tracked as release work.
 Automated checks do not replace the manual WCAG 2.2 AA review required before
 release.
 

@@ -178,7 +178,12 @@ export function AssessmentScreen({
             delivering one is shown to actually increase {creature.name}
             &rsquo;s behavior above baseline.
           </p>
-          <div className="table-scroll">
+          <div
+            className="table-scroll"
+            tabIndex={0}
+            role="group"
+            aria-label="Preference hierarchy, scrollable"
+          >
             <table>
               <caption>
                 {creature.name}&rsquo;s preference hierarchy from this

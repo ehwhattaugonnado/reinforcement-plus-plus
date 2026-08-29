@@ -269,6 +269,117 @@ describe('invalid commands are atomic', () => {
   })
 })
 
+describe('log-mutating commands are rejected while paused (ADR 0011)', () => {
+  it('rejects a delivery, appends no event, and notifies nobody', () => {
+    const s = crfSession(SEED)
+    expect(tickUntilNextResponse(s, 50)).toBe(true)
+    const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
+    expect(s.setPaused(true).ok).toBe(true)
+
+    const before = s.getSnapshot()
+    let notifications = 0
+    s.subscribe(() => notifications++)
+
+    const result = s.deliverStimulus(stimulusId)
+
+    expect(result).toMatchObject({ ok: false, reason: 'session-paused' })
+    expect(s.getSnapshot()).toBe(before)
+    expect(s.getSnapshot().events).toHaveLength(before.events.length)
+    expect(notifications).toBe(0)
+  })
+
+  it('classifies a delivery normally again once the session resumes', () => {
+    const s = crfSession(SEED)
+    expect(tickUntilNextResponse(s, 50)).toBe(true)
+    const stimulusId = s.getSnapshot().creature.stimuli[0]!.stimulusId
+
+    expect(s.setPaused(true).ok).toBe(true)
+    expect(s.deliverStimulus(stimulusId)).toMatchObject({
+      reason: 'session-paused',
+    })
+    expect(s.setPaused(false).ok).toBe(true)
+
+    const result = s.deliverStimulus(stimulusId)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.events[0]).toMatchObject({
+      type: 'stimulus-delivered',
+      contingency: 'response-contingent',
+      timing: 'prompt',
+      scheduleFidelity: 'on-schedule',
+    })
+  })
+
+  it('rejects every other log-mutating command, including before its own validation', () => {
+    const s = createSession({ seed: SEED })
+    expect(s.setPaused(true).ok).toBe(true)
+    const drawsBefore = s.rng.draws
+    const before = s.getSnapshot()
+
+    // `presentNextPair` is the one command that draws seeded randomness on its
+    // committed path, so guarding it is what keeps ADR 0008's "a rejection
+    // consumes no RNG draws" true for the paused case.
+    expect(s.presentNextPair()).toMatchObject({ reason: 'session-paused' })
+    expect(s.recordObservedSelection(null)).toMatchObject({
+      reason: 'session-paused',
+    })
+    // The paused guard runs before each command's own validation, so a paused
+    // session reports why it is stopped rather than a phase or argument error.
+    expect(s.startRound('crf')).toMatchObject({ reason: 'session-paused' })
+    expect(s.finishSession()).toMatchObject({ reason: 'session-paused' })
+    expect(s.deliverStimulus('sandwich')).toMatchObject({
+      reason: 'session-paused',
+    })
+
+    expect(s.rng.draws).toBe(drawsBefore)
+    expect(s.getSnapshot()).toBe(before)
+  })
+
+  it('keeps setPaused and setSpeed operable while paused, so nothing is stranded', () => {
+    const s = createSession({ seed: SEED })
+    expect(s.setPaused(true).ok).toBe(true)
+    expect(s.setSpeed(0.5).ok).toBe(true)
+    expect(s.getSnapshot().speed).toBe(0.5)
+    expect(s.getSnapshot().paused).toBe(true)
+    expect(s.setPaused(false).ok).toBe(true)
+    expect(s.getSnapshot().paused).toBe(false)
+  })
+
+  it('leaves deterministic replay unaffected', () => {
+    function run(
+      attemptWhilePaused: boolean,
+    ): ReturnType<typeof createSession> {
+      const s = createSession({ seed: SEED })
+      completeAssessment(s)
+      expect(s.startRound('baseline').ok).toBe(true)
+      for (let i = 0; i < 20; i++) s.tick(50)
+      expect(s.setPaused(true).ok).toBe(true)
+      if (attemptWhilePaused) {
+        expect(s.deliverStimulus('treat').ok).toBe(false)
+        expect(s.presentNextPair().ok).toBe(false)
+        expect(s.recordObservedSelection(null).ok).toBe(false)
+        expect(s.startRound('crf').ok).toBe(false)
+        expect(s.finishSession().ok).toBe(false)
+      }
+      expect(s.setPaused(false).ok).toBe(true)
+      for (let i = 0; i < 20; i++) s.tick(50)
+      // A trailing event-emitting command fixes the clock, since replay
+      // restores simulated time from the last recorded timestamp.
+      expect(s.setPaused(true).ok).toBe(true)
+      return s
+    }
+
+    const withAttempts = run(true).getSnapshot()
+    const clean = run(false).getSnapshot()
+
+    expect(withAttempts).toEqual(clean)
+    const result = replay(SEED, withAttempts.events)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state).toEqual(withAttempts)
+  })
+})
+
 describe('snapshots are immutable', () => {
   it('returns a new object identity after a state change', () => {
     const s = createSession({ seed: SEED })

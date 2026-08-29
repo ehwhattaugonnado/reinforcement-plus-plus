@@ -7,6 +7,12 @@ import {
   responseRateSummaryText,
   type ResponseRateChartData,
 } from '../../sim'
+import {
+  AXIS_BOTTOM_LABEL_OFFSET,
+  AXIS_LEFT_LABEL_OFFSET,
+  CHART_MARGIN,
+  CHART_VIEWBOX_WIDTH,
+} from './format'
 
 /**
  * Renders response rate by round as a bar chart (docs/architecture/
@@ -19,15 +25,15 @@ import {
 export function ResponseRateChart({
   data,
   title = 'Response rate by round',
-  width = 420,
-  height = 220,
+  width = CHART_VIEWBOX_WIDTH,
+  height = 240,
 }: {
   data: ResponseRateChartData
   title?: string
   width?: number
   height?: number
 }) {
-  const margin = { top: 20, right: 16, bottom: 32, left: 48 }
+  const margin = CHART_MARGIN
   const innerWidth = Math.max(0, width - margin.left - margin.right)
   const innerHeight = Math.max(0, height - margin.top - margin.bottom)
 
@@ -58,8 +64,18 @@ export function ResponseRateChart({
         aria-hidden="true"
       >
         <Group left={margin.left} top={margin.top}>
-          <AxisLeft scale={yScale} label="Responses per minute" numTicks={4} />
-          <AxisBottom top={innerHeight} scale={xScale} label="Round" />
+          <AxisLeft
+            scale={yScale}
+            label="Responses per minute"
+            labelOffset={AXIS_LEFT_LABEL_OFFSET}
+            numTicks={4}
+          />
+          <AxisBottom
+            top={innerHeight}
+            scale={xScale}
+            label="Round"
+            labelOffset={AXIS_BOTTOM_LABEL_OFFSET}
+          />
           {rows.map((row) => {
             const barWidth = xScale.bandwidth()
             const barHeight = innerHeight - yScale(row.ratePerMinute)

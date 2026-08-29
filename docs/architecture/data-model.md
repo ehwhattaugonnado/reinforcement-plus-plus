@@ -27,7 +27,7 @@ type SessionState = {
   phase: 'assessment' | 'baseline' | 'crf' | 'vr' | 'extinction' | 'debrief'
   elapsedSimMs: number
   speed: 0.5 | 1
-  paused: boolean
+  paused: boolean // while true, only setPaused/setSpeed may append (ADR 0011)
   creature: CreatureState
   assessment: AssessmentState
   schedulePlan: SchedulePlan | null
@@ -123,9 +123,19 @@ type SimEvent =
 plus event log is sufficient for replay and so that Section 5 can exclude
 paused time without consulting a second data path. Every public command that
 changes clock behavior appends an event; `setPaused` and `setSpeed` are not
-exceptions. `configVersion` identifies the `SimConfig` constants (Section 6) a
-log was produced under, so an old log is never silently reinterpreted under
-new thresholds.
+exceptions. The converse also holds: while `paused` is true, `setPaused` and
+`setSpeed` are the *only* commands that append anything. Every log-mutating
+command — `deliverStimulus`, `startRound`, `finishSession`, `presentNextPair`,
+`recordObservedSelection` — is rejected atomically with the reason
+`session-paused` ([ADR 0011](../adr/0011-reject-log-mutating-commands-while-paused.md)),
+because simulated time is frozen and an appended event would be timestamped
+and classified against a stopped clock; a delivery, in particular, would be
+scored `noncontingent` for a stop the learner may not have caused. A paused
+`tick` is still accepted and advances nothing.
+
+`configVersion` identifies the `SimConfig` constants (Section 6) a log was
+produced under, so an old log is never silently reinterpreted under new
+thresholds.
 
 A user pause records `reason: 'user'`. The one-time automatic pauses at the CRF
 and VR coaching thresholds record `reason: 'coaching'` and their `round`, so

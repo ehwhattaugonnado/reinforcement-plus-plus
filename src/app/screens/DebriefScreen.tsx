@@ -17,7 +17,14 @@ export function DebriefScreen({
   session: SimSession
   mode: Mode
 }) {
-  const result = useMemo(() => session.getDebriefSummary(), [session, state])
+  const result = useMemo(
+    () => session.getDebriefSummary(),
+    // `session` is a mutable store and the summary derives from its current
+    // state, so the snapshot identity is what marks this cache stale. The
+    // linter cannot see that relationship through the store boundary.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [session, state],
+  )
 
   const reinforcerConclusion =
     result.demonstratedStimulusIds.length > 0

@@ -125,6 +125,15 @@ export type CommandRejectionReason =
    */
   | 'vr-cycles-not-met'
   | 'extinction-not-complete'
+  /**
+   * Any log-mutating command issued while `paused` is true (ADR 0011).
+   * Simulated time is frozen while paused, so an appended event would be
+   * classified and timestamped against a clock that is not running --
+   * notably a delivery, which would score as `noncontingent` for a stop the
+   * learner may not have caused. `setPaused` and `setSpeed` are exempt, and a
+   * paused `tick` is still accepted with an empty event list.
+   */
+  | 'session-paused'
 
 export type CommandResult =
   | { readonly ok: true; readonly events: readonly SimEvent[] }

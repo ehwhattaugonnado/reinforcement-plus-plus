@@ -13,6 +13,8 @@ import {
   ResponseRateChart,
 } from '../charts'
 import type { Mode } from '../hooks/useMode'
+import type { PauseReason } from '../hooks/useSimState'
+import { COACHING_COPY, deriveCrfCoaching, deriveVrCoaching } from './coaching'
 
 const SIMPLE_PHASE_COPY: Record<string, string> = {
   baseline: 'First, watch Pip on their own before training begins.',
@@ -38,10 +40,12 @@ export function TrainingScreen({
   state,
   session,
   mode = 'simple',
+  pauseReason,
 }: {
   state: SessionState
   session: SimSession
   mode?: Mode
+  pauseReason?: PauseReason | null | undefined
 }) {
   const responseCount = useMemo(
     () => state.events.filter((e) => e.type === 'response-emitted').length,
@@ -58,6 +62,11 @@ export function TrainingScreen({
 
   const trainingStatus = useMemo(
     () => session.getTrainingStatus(),
+    // `session` is a mutable store, so the snapshot is its version token: the
+    // derivation reads the session's *current* state, and `state` identity is
+    // what says that state moved. The linter cannot see that relationship
+    // through the store boundary.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [session, state],
   )
   const baselineDone =
@@ -68,6 +77,8 @@ export function TrainingScreen({
   const stimuli = state.creature.stimuli
   const assessmentSummary = useMemo(
     () => session.getDebriefSummary().assessment,
+    // As above: the event log is the version token for this derivation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [session, state.events],
   )
   const preferenceOrder = assessmentSummary.hierarchy
@@ -81,10 +92,15 @@ export function TrainingScreen({
   const acquisitionMet = trainingStatus.acquisitionMet
   const coachingDue = trainingStatus.crfCoachingDue
 
+  // A paused session emits no responses, so a delivery made while stopped
+  // could only ever be classified noncontingent and counted against the
+  // learner. The core rejects it outright; the UI refuses to ask for it, so
+  // the two agree rather than relying on the rejection as a safety net.
   const deliver = useCallback(() => {
     if (state.phase !== 'crf' && state.phase !== 'vr') return
+    if (state.paused) return
     void session.deliverStimulus(selectedStimulusId)
-  }, [session, state.phase, selectedStimulusId])
+  }, [session, state.phase, state.paused, selectedStimulusId])
 
   // Documented keyboard shortcut for the delivery target: "D", so a
   // keyboard-only learner does not have to tab to the button after every
@@ -112,13 +128,11 @@ export function TrainingScreen({
   const lastDelivery =
     lastEvent?.type === 'stimulus-delivered' ? lastEvent : undefined
 
+  const crfCoaching = deriveCrfCoaching(crfMetrics)
+
   const crfStatusText = (() => {
     if (coachingDue) {
-      return (
-        `Coaching: acquisition has not been reached yet. Deliver right ` +
-        `after ${state.creature.name} responds, every time, for the ` +
-        `steadiest results.`
-      )
+      return `Coaching: ${COACHING_COPY[crfCoaching].advanced(state.creature.name)}`
     }
     if (lastDelivery !== undefined) {
       if (lastDelivery.contingency === 'noncontingent') {
@@ -150,19 +164,55 @@ export function TrainingScreen({
   const vrTrialHistoryList = trainingStatus.vrHistory
   const extinctionComplete = trainingStatus.extinctionComplete
 
+  // What actually happened to this round's deliveries, read straight off the
+  // append-only log. The coaching message below is derived from this rather
+  // than asserted from the clock: the pause itself fires on elapsed time
+  // (`vrCoachingPauseMs`), which says nothing about *what* the learner did,
+  // and telling a learner they repeated a pattern they did not repeat is an
+  // educational defect (Product Principle 1 — nothing asserted, everything
+  // derived).
+  const vrDeliveryTally = useMemo(() => {
+    let roundStartMs: number | null = null
+    for (const event of state.events) {
+      if (event.type === 'phase-changed' && event.phase === 'vr') {
+        roundStartMs = event.at
+      }
+    }
+    const tally = {
+      deliveries: 0,
+      noncontingent: 0,
+      notVariable: 0,
+      premature: 0,
+      overrun: 0,
+      onSchedule: 0,
+    }
+    if (roundStartMs === null) return tally
+    for (const event of state.events) {
+      if (event.type !== 'stimulus-delivered') continue
+      if (event.at < roundStartMs) continue
+      tally.deliveries++
+      if (event.contingency === 'noncontingent') {
+        tally.noncontingent++
+        continue
+      }
+      if (event.scheduleFidelity === 'not-variable') tally.notVariable++
+      else if (event.scheduleFidelity === 'premature') tally.premature++
+      else if (event.scheduleFidelity === 'overrun') tally.overrun++
+      else if (event.scheduleFidelity === 'on-schedule') tally.onSchedule++
+    }
+    return tally
+  }, [state.events])
+
   // VR-3 has no discrete "the schedule is now due" instant (ADR 0010): every
   // delivery is judged independently against the round's running average of
   // responses-per-delivery, so there is nothing to wait for the way CRF's
   // outstandingCycle is -- the status below always reflects the last
   // delivery's outcome or the live count/average.
+  const vrCoaching = deriveVrCoaching(vrDeliveryTally)
+
   const vrStatusText = (() => {
     if (vrCoachingDueFlag) {
-      return (
-        `Coaching: the ${trainingStatus.vrRequired} on-schedule cycles have not been reached yet. ` +
-        `${state.creature.name}'s reinforcement history is judged by a ` +
-        `running average, not a fixed count -- try delivering after a ` +
-        `varying number of responses rather than the same number every time.`
-      )
+      return `Coaching: ${COACHING_COPY[vrCoaching].advanced(state.creature.name)}`
     }
     if (lastDelivery !== undefined) {
       if (lastDelivery.contingency === 'noncontingent') {
@@ -194,7 +244,7 @@ export function TrainingScreen({
   })()
 
   const simpleCrfStatusText = coachingDue
-    ? `Pause and refocus: deliver right after every response from ${state.creature.name}.`
+    ? COACHING_COPY[crfCoaching].simple(state.creature.name)
     : lastDelivery !== undefined
       ? lastDelivery.contingency === 'noncontingent'
         ? 'That delivery did not follow a response, so it cannot strengthen that response.'
@@ -205,7 +255,7 @@ export function TrainingScreen({
         ? `${state.creature.name} just responded. Deliver now.`
         : `Waiting for ${state.creature.name} to respond.`
   const simpleVrStatusText = vrCoachingDueFlag
-    ? 'Try changing the number of responses between deliveries instead of repeating one pattern.'
+    ? COACHING_COPY[vrCoaching].simple(state.creature.name)
     : lastDelivery !== undefined
       ? lastDelivery.contingency === 'noncontingent'
         ? 'That delivery did not follow a response.'
@@ -247,13 +297,31 @@ export function TrainingScreen({
         announcement earns its place; this text alternative is always
         available to a screen reader on request instead.
       */}
+      {/*
+        The "just responded" clause used to carry an exact millisecond
+        latency, which changed on every animation frame and grew this box by
+        one line and back — moving the delivery target 25px under the
+        learner's cursor at the exact moment the prompt window opened.
+        Milliseconds are a system unit, not a human one; the exact latency
+        still exists, in the Advanced event table. The recency flag is a
+        fixed-width mark so the sentence cannot reflow when it appears.
+      */}
       <p className="creature-state">
         {state.creature.name} has responded {responseCount}{' '}
-        {responseCount === 1 ? 'time' : 'times'} so far
-        {lastResponseAgoMs !== null && lastResponseAgoMs < 2000
-          ? ` — just responded (${Math.round(lastResponseAgoMs)}ms ago).`
-          : '.'}{' '}
-        Mood: {state.creature.moodState}.
+        {responseCount === 1 ? 'time' : 'times'} so far. Mood:{' '}
+        {state.creature.moodState}.{' '}
+        <span
+          className="creature-recency"
+          data-responded={
+            lastResponseAgoMs !== null && lastResponseAgoMs < 2000
+              ? ''
+              : undefined
+          }
+        >
+          {lastResponseAgoMs !== null && lastResponseAgoMs < 2000
+            ? 'Responded just now.'
+            : ''}
+        </span>
       </p>
 
       {state.phase === 'baseline' && (
@@ -264,6 +332,14 @@ export function TrainingScreen({
               : 'Baseline complete. Choose a stimulus informed by the preference hierarchy, then start CRF.'
             : 'Baseline in progress: this is a reference measurement and is not scored.'}
         </p>
+      )}
+
+      {state.phase === 'baseline' && (
+        <PausedNotice
+          paused={state.paused}
+          reason={pauseReason}
+          onResume={() => void session.setPaused(false)}
+        />
       )}
 
       {state.phase === 'baseline' && baselineDone && (
@@ -312,7 +388,18 @@ export function TrainingScreen({
             {mode === 'simple' ? simpleCrfStatusText : crfStatusText}
           </p>
 
-          <button type="button" className="delivery-target" onClick={deliver}>
+          <PausedNotice
+            paused={state.paused}
+            reason={pauseReason}
+            onResume={() => void session.setPaused(false)}
+          />
+
+          <button
+            type="button"
+            className="delivery-target"
+            onClick={deliver}
+            aria-disabled={state.paused}
+          >
             Deliver {STIMULUS_LABELS[selectedStimulusId]} to{' '}
             {state.creature.name}
           </button>
@@ -378,7 +465,18 @@ export function TrainingScreen({
             {mode === 'simple' ? simpleVrStatusText : vrStatusText}
           </p>
 
-          <button type="button" className="delivery-target" onClick={deliver}>
+          <PausedNotice
+            paused={state.paused}
+            reason={pauseReason}
+            onResume={() => void session.setPaused(false)}
+          />
+
+          <button
+            type="button"
+            className="delivery-target"
+            onClick={deliver}
+            aria-disabled={state.paused}
+          >
             Deliver {STIMULUS_LABELS[selectedStimulusId]} to{' '}
             {state.creature.name}
           </button>
@@ -395,7 +493,12 @@ export function TrainingScreen({
           </p>
 
           {mode === 'advanced' && vrTrialHistoryList.length > 0 && (
-            <div className="table-scroll">
+            <div
+              className="table-scroll"
+              tabIndex={0}
+              role="group"
+              aria-label="Reinforcement history, scrollable"
+            >
               <table className="vr-trial-history">
                 <caption>
                   Reinforcement history: one column per response, in order.
@@ -477,11 +580,17 @@ export function TrainingScreen({
           {extinctionComplete ? (
             <p role="status">Observation complete. The debrief is ready.</p>
           ) : (
-            <p>
+            <p className="extinction-remaining">
               {Math.ceil(trainingStatus.extinctionRemainingMs / 1000)} simulated
               seconds of observation remain.
             </p>
           )}
+
+          <PausedNotice
+            paused={state.paused}
+            reason={pauseReason}
+            onResume={() => void session.setPaused(false)}
+          />
           {extinctionComplete && (
             <button type="button" onClick={() => void session.finishSession()}>
               Finish demonstration and see debrief
@@ -493,7 +602,12 @@ export function TrainingScreen({
       {mode === 'advanced' && (
         <>
           <h3>Stimulus values</h3>
-          <div className="table-scroll">
+          <div
+            className="table-scroll"
+            tabIndex={0}
+            role="group"
+            aria-label="Stimulus values, scrollable"
+          >
             <table>
               <caption className="visually-hidden">
                 Current motivating value of each stimulus, for{' '}
@@ -529,6 +643,50 @@ export function TrainingScreen({
         </section>
       )}
     </section>
+  )
+}
+
+/** What each kind of stop means, and what the learner does about it. */
+const PAUSE_NOTICE_COPY: Record<PauseReason, string> = {
+  away:
+    'The session paused itself because you left this tab, so no time passed ' +
+    'while you were away.',
+  coaching:
+    'The session paused itself for a coaching checkpoint. Read the note ' +
+    'above, then carry on when you are ready.',
+  user: 'The session is paused, so nothing is happening yet.',
+}
+
+/**
+ * The stopped state, stated where the learner is actually looking.
+ *
+ * The session can stop without being asked — a backgrounded tab, a coaching
+ * checkpoint — and the control margin that carries the standing Pause button
+ * is `position: static` below 50rem, which puts it several hundred pixels
+ * above the viewport during a round. A learner working through a round would
+ * otherwise have no on-screen indication at all that the world had stopped.
+ *
+ * Renders nothing while running, so it costs a running round no space.
+ */
+function PausedNotice({
+  paused,
+  reason,
+  onResume,
+}: {
+  paused: boolean
+  reason: PauseReason | null | undefined
+  onResume: () => void
+}) {
+  if (!paused) return null
+  return (
+    <div className="paused-notice" role="status">
+      <p className="paused-notice-text">
+        <strong>Paused.</strong> {PAUSE_NOTICE_COPY[reason ?? 'user']}
+      </p>
+      <button type="button" className="paused-resume" onClick={onResume}>
+        Resume session
+      </button>
+    </div>
   )
 }
 

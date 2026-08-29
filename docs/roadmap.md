@@ -39,7 +39,7 @@ Standard Celeration Chart.
 
 ## 2.1 Current Implementation Status
 
-As of 2026-08-28, the repository is on `main` and the milestone
+As of 2026-08-29, the repository is on `main` and the milestone
 status is:
 
 | Milestone | Status | Current evidence |
@@ -52,7 +52,58 @@ status is:
 | 5 — VR-3 | Complete | The original exact-seeded-per-cycle design shipped but proved unplayable by a live human tester: nothing communicates a hidden per-delivery target, so a reasonable delivery could be rejected. Replaced per [ADR 0010](adr/0010-vr-fidelity-as-running-average.md) with a session-wide running-average tolerance (seeded phantom prior, no floor): `classifyVrDelivery` (vr.ts) judges each delivery against the hypothetical average it would produce, and a fixed-ratio-in-disguise check (`not-variable`) excludes a repeated identical gap from credit. `stimulus-delivered` now carries `schedule: 'CRF' \| 'VR' \| null`, stamped at commit time. VR no longer emits `criterion-met`/`criterion-missed`/`cycle-abandoned` — there is no discrete "due" instant under a no-floor average model. The guided UI exposes response count, running average, and a trial-by-trial reinforcement-history table (`vrTrialHistory`), not a nonexistent eligibility cue. |
 | 6 — Extinction/evidence | Complete | Event-derived reinforcer-evidence and burst-detection rules are tested, including asymmetric sample-count floors and a calibrated 90s detection window; `learning.ts` has a real seeded extinction-transition burst term, live extinction responses append withheld VR criteria, the round lasts 150 simulated seconds, and `finishSession()` handles both skip and completion transitions. The observational UI withholds delivery and exposes completion. |
 | 7 — Debrief/charts | Partial | Shared chart-data projectors and accessible visx chart views are tested and wired into Advanced-mode training. A basic shared debrief presents event-derived reinforcer/extinction conclusions in both modes and Advanced charts. The complete mode-neutral summary (assessment accuracy, fidelity, latency/errors, CRF/VR trends, and satiation), conclusion-parity tests, and removal of app-layer default-config reads remain. |
-| 8 — Release hardening | Not started | Playwright currently covers shell smoke, controls, keyboard operation, and an automated axe pass, not the complete learner journey. |
+| 8 — Release hardening | Not started | Playwright currently covers shell smoke, controls, keyboard operation, and an automated axe pass, not the complete learner journey. A 2026-08-29 UI/UX defect pass (see 2.1.1) closed a batch of interaction defects and added component coverage, but the end-to-end journey suite is still outstanding. |
+
+### 2.1.1 UI/UX defect pass (2026-08-29)
+
+A fanned-out UI/UX review (design review, deterministic detector, browser
+forensics) ran against the shipped app and its findings were fixed in one
+batch. The measured defects and their resolutions:
+
+- **The React bridge re-rendered the whole tree ~60 times a second.**
+  `useSimState` published a new snapshot on every animation frame. It now
+  collapses the clock to a 250ms presentation quantum and lets React bail
+  out in between. Presentation-only: the core keeps full `elapsedSimMs`
+  precision, commands read live state, and no simulated timing window
+  changed (ADR 0005).
+- **The delivery target moved under the cursor.** A millisecond latency
+  readout in `.creature-state` re-rendered every frame and grew the box by
+  one line, displacing the delivery target 24.8px four times per 25s at the
+  exact moment the prompt window opened. Milliseconds are gone from learner
+  copy (they remain in the Advanced event table), and the status boxes
+  reserve their line box. Measured after: one distinct target position over
+  60 samples, at 1440px and 375px.
+- **A stopped session was invisible.** Pausing changed a button label, an
+  `aria-pressed` value, and one sentence — all inside a control margin that
+  is `position: static` below 50rem and sits hundreds of pixels above the
+  viewport during a round. The sheet now carries the state (`data-paused`),
+  and an in-round notice names *why* it stopped. See DESIGN.md, The Stopped
+  State.
+- **A paused delivery penalised the learner.** `deliverStimulus` had no
+  paused guard, so a delivery against a stopped clock classified
+  `noncontingent` and counted against the debrief's contingent-delivery
+  rate. Now rejected — [ADR 0011](adr/0011-reject-log-mutating-commands-while-paused.md),
+  which amends ADR 0008.
+- **Coaching copy asserted what the log contradicted.** The coaching pause
+  fires on elapsed time alone, but its message told every learner they had
+  repeated one response count. The finding is now derived from `CrfMetrics`
+  and a VR delivery tally (`src/app/screens/coaching.ts`) and can conclude
+  that nothing is wrong. Both modes render the same finding (ADR 0004).
+- **The charts did not align.** Different viewBox widths (480 vs 420) and
+  margins made the two charts render at different scale factors with axis
+  text at two sizes; axis labels were clipped away entirely; the x-domain
+  tracked the clock and drifted ~10px/second forever. Shared geometry now
+  lives in `src/app/charts/format.ts`.
+- **The ruled sheet aligned with nothing.** Rules every 1.7rem against a
+  24.8px body line box meant 2.4px of drift per line. `--rule` is now the
+  sheet's vertical unit and per-line drift is zero.
+- Also: `.table-scroll` regions are keyboard reachable (axe
+  `scrollable-region-focusable`), and the stale kraft `theme-color` is gone.
+
+Known residual, recorded rather than hidden: chart axis text scales with the
+container (14.25px at 1440px, 6.23px at 375px). The fix is a
+container-driven viewBox, not a CSS tweak; the accessible text summary and
+data table carry the same facts meanwhile.
 
 The next critical-path increment is completing Milestone 7's shared
 debrief/session summary. The extinction-round contract is 150 simulated seconds,

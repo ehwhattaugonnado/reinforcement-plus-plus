@@ -299,6 +299,19 @@ export function cumulativeRecordAnnotationsTable(
 }
 
 /**
+ * `M:SS` simulated time for the text alternatives. Deliberately a local copy
+ * of the chart-view layer's `formatSimTime`: `src/sim/` must not import from
+ * `src/app/` (ADR 0002, enforced in eslint.config.js). Keep the two in the
+ * same format so the spoken summary and the drawn axis agree.
+ */
+function formatSimTimeText(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
+/**
  * A textual alternative to the cumulative-record graph. Deliberately avoids
  * the word "reinforcer" — this chart-data layer never has the event-derived
  * evidence needed to justify that label (docs/aba-glossary.md).
@@ -317,7 +330,7 @@ export function cumulativeRecordSummaryText(
   const phaseChanges = data.annotations.filter((a) => a.kind === 'phase-change')
 
   return (
-    `Cumulative response record through ${data.extentMs}ms: ${totalResponses} ` +
+    `Cumulative response record through ${formatSimTimeText(data.extentMs)}: ${totalResponses} ` +
     `total response${totalResponses === 1 ? '' : 's'} recorded, with ` +
     `${deliveries.length} stimulus deliver${deliveries.length === 1 ? 'y' : 'ies'} ` +
     `and ${phaseChanges.length} phase change${phaseChanges.length === 1 ? '' : 's'} annotated.`

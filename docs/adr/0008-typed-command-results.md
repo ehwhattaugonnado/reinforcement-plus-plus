@@ -35,7 +35,14 @@ The completion reasons were added with the baseline-to-CRF, CRF-to-VR,
 VR-to-extinction/debrief, and extinction-to-debrief gates. `vr-cycles-not-met`
 retains the runtime's legacy “cycles” name; learner-facing documentation calls
 the requirement six credited VR deliveries. A paused `tick` is accepted with
-an empty event list, so `paused` is not a rejection reason.
+an empty event list.
+
+**Amended by [ADR 0011](0011-reject-log-mutating-commands-while-paused.md).**
+This ADR originally stated that `paused` is not a rejection reason. That
+remains true of `tick`, which is still accepted while paused and returns an
+empty event list — but every *log-mutating* command is now rejected with
+`session-paused`, because a delivery made against a stopped clock could only
+ever be classified noncontingent and counted against the learner.
 
 Rules:
 

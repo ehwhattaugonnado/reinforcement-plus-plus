@@ -211,6 +211,19 @@ describe('graph/table/text consistency', () => {
     )
   })
 
+  it('states the cumulative record extent as human time, not raw milliseconds', () => {
+    // This string is the spoken alternative to the graph: a screen reader
+    // must not read out "through 46231.474ms". Format matches the chart
+    // axis/table's `M:SS` so the two alternatives agree.
+    const data = buildCumulativeRecordChartData(FULL_SESSION_LOG)
+    const text = cumulativeRecordSummaryText(data)
+
+    expect(text).not.toMatch(/\d+(\.\d+)?ms/)
+    const totalSeconds = Math.round(data.extentMs / 1000)
+    const expected = `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`
+    expect(text).toContain(`through ${expected}:`)
+  })
+
   it('derives the response-rate table and text from one chart-data object', () => {
     const data = buildResponseRateChartData(FULL_SESSION_LOG)
     const byRoundTable = responseRateByRoundTable(data)

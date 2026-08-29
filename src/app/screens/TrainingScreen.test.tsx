@@ -69,6 +69,12 @@ function vrSession(seed: string): SimSession {
  */
 function deliverAfterGap(session: SimSession, gap: number): void {
   for (let i = 0; i < gap; i++) tickUntilNextResponse(session, 50)
+  // A coaching pause can land on the final tick of the gap. The core now
+  // rejects a delivery made while paused (ADR 0011) — a paused session emits
+  // no responses, so such a delivery could only be classified noncontingent
+  // and counted against the learner. A real learner resumes before
+  // delivering, so this helper does the same rather than losing the cycle.
+  if (session.getSnapshot().paused) session.setPaused(false)
   const stimulusId = session.getSnapshot().creature.stimuli[0]!.stimulusId
   session.deliverStimulus(stimulusId)
 }
@@ -661,5 +667,205 @@ describe('TrainingScreen', () => {
         screen.getByRole('button', { name: /skip.*debrief/i }),
       ).toBeInTheDocument()
     })
+  })
+})
+
+describe('the stopped state is visible where the learner is looking', () => {
+  it('says nothing at all while the session is running', () => {
+    const session = crfSession('paused-ui-1')
+    render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+    expect(screen.queryByText(/^Paused\./)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /resume session/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('states the stop and offers an in-round resume, inside the trial content', () => {
+    const session = crfSession('paused-ui-2')
+    session.setPaused(true)
+    render(
+      <TrainingScreen
+        state={session.getSnapshot()}
+        session={session}
+        pauseReason="user"
+      />,
+    )
+
+    // The control margin is `position: static` below 50rem and scrolls out of
+    // view during a round, so the round itself has to carry the state.
+    const notice = screen.getByText(/the session is paused/i)
+    expect(notice).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /resume session/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('explains an automatic stop rather than leaving the learner to guess', () => {
+    const session = crfSession('paused-ui-3')
+    session.setPaused(true)
+
+    render(
+      <TrainingScreen
+        state={session.getSnapshot()}
+        session={session}
+        pauseReason="away"
+      />,
+    )
+    expect(screen.getByText(/because you left this tab/i)).toBeInTheDocument()
+
+    screen.getByRole('button', { name: /resume session/i })
+  })
+
+  it('names a coaching checkpoint as the cause when the sim paused itself', () => {
+    const session = crfSession('paused-ui-4')
+    session.setPaused(true)
+    render(
+      <TrainingScreen
+        state={session.getSnapshot()}
+        session={session}
+        pauseReason="coaching"
+      />,
+    )
+    expect(screen.getByText(/coaching checkpoint/i)).toBeInTheDocument()
+  })
+
+  it('resumes the simulation from the in-round button', async () => {
+    const user = userEvent.setup()
+    const session = crfSession('paused-ui-5')
+    session.setPaused(true)
+    render(
+      <TrainingScreen
+        state={session.getSnapshot()}
+        session={session}
+        pauseReason="user"
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /resume session/i }))
+    expect(session.getSnapshot().paused).toBe(false)
+  })
+
+  it('refuses the delivery target while paused, by pointer and by shortcut', async () => {
+    const user = userEvent.setup()
+    const session = crfSession('paused-ui-6')
+    session.setPaused(true)
+    render(
+      <TrainingScreen
+        state={session.getSnapshot()}
+        session={session}
+        pauseReason="user"
+      />,
+    )
+
+    const target = screen.getByRole('button', { name: /^Deliver /i })
+    expect(target).toHaveAttribute('aria-disabled', 'true')
+
+    // A paused session emits no responses, so a delivery could only ever be
+    // classified noncontingent and counted against the learner (ADR 0011).
+    const before = session.getSnapshot().events.length
+    await user.click(target)
+    expect(session.getSnapshot().events.length).toBe(before)
+
+    fireEvent.keyDown(window, { key: 'd' })
+    expect(session.getSnapshot().events.length).toBe(before)
+  })
+
+  it('has no axe violations while paused', async () => {
+    const session = crfSession('paused-ui-7')
+    session.setPaused(true)
+    const { container } = render(
+      <TrainingScreen
+        state={session.getSnapshot()}
+        session={session}
+        pauseReason="away"
+      />,
+    )
+    await expectNoAxeViolations(container)
+  })
+})
+
+describe('learner-facing copy carries no system units', () => {
+  it('never prints a raw millisecond latency in the creature state', () => {
+    const session = crfSession('no-ms-1')
+    // Land inside the two-second recency window, where the millisecond
+    // readout used to live and re-render on every animation frame.
+    tickUntilNextResponse(session, 50)
+    render(<TrainingScreen state={session.getSnapshot()} session={session} />)
+
+    const state = document.querySelector('.creature-state')
+    expect(state).not.toBeNull()
+    expect(state?.textContent ?? '').toMatch(/responded just now/i)
+    expect(state?.textContent ?? '').not.toMatch(/\d+\s*ms/i)
+  })
+})
+
+describe('coaching is derived from the event log, not from the clock', () => {
+  /** Runs a CRF round past `crfCoachingPauseMs` delivering promptly every time. */
+  function coachedCrfSession(seed: string): SimSession {
+    const session = crfSession(seed)
+    let guard = 0
+    while (!session.getTrainingStatus().crfCoachingDue && guard < 200) {
+      tickUntilNextResponse(session, 50)
+      if (session.getSnapshot().paused) session.setPaused(false)
+      const stimulusId = session.getSnapshot().creature.stimuli[0]!.stimulusId
+      session.deliverStimulus(stimulusId)
+      guard++
+    }
+    return session
+  }
+
+  it('does not accuse a learner whose deliveries the log shows were correct', () => {
+    const session = coachedCrfSession('coaching-1')
+    // The premise, asserted rather than assumed: a test that silently skips
+    // when the seed does not reach a coaching pause proves nothing.
+    expect(session.getTrainingStatus().crfCoachingDue).toBe(true)
+
+    const metrics = session.getTrainingStatus().crfMetrics
+    // Guard the premise: this run really did deliver cleanly.
+    expect(metrics.noncontingentDeliveries).toBe(0)
+
+    render(
+      <TrainingScreen
+        state={session.getSnapshot()}
+        session={session}
+        mode="advanced"
+      />,
+    )
+    const status = document.querySelector('.crf-status')?.textContent ?? ''
+    expect(status).toMatch(/no fidelity problem|needs more of them/i)
+    expect(status).not.toMatch(/rather than the same number every time/i)
+  })
+
+  it('reaches the same conclusion in both presentation modes (ADR 0004)', () => {
+    const session = coachedCrfSession('coaching-2')
+    expect(session.getTrainingStatus().crfCoachingDue).toBe(true)
+
+    const { unmount } = render(
+      <TrainingScreen
+        state={session.getSnapshot()}
+        session={session}
+        mode="advanced"
+      />,
+    )
+    const advanced = document.querySelector('.crf-status')?.textContent ?? ''
+    unmount()
+
+    render(
+      <TrainingScreen
+        state={session.getSnapshot()}
+        session={session}
+        mode="simple"
+      />,
+    )
+    const simple = document.querySelector('.crf-status')?.textContent ?? ''
+
+    // Different wording, same finding: both say nothing is wrong, or both
+    // name a problem. A conclusion present in one mode and absent in the
+    // other is a defect, not a presentation difference.
+    const onTrack = (text: string) =>
+      /no fidelity problem|nothing is going wrong|needs more of them|needs a few more/i.test(
+        text,
+      )
+    expect(onTrack(simple)).toBe(onTrack(advanced))
   })
 })

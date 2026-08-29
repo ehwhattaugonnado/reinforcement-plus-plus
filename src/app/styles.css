@@ -25,6 +25,17 @@
   --font-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-data:
     'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  /*
+   * The rule pitch, and therefore the vertical unit of the whole sheet. The
+   * ruled background, the body line box, and every heading margin are all
+   * multiples of this one value, so text sits *on* the rules instead of
+   * drifting across them. Before this existed the sheet ruled every 1.7rem
+   * while the body line box was 1.55 x 16px = 24.8px, so each line landed
+   * 2.4px further off than the last and the app's central metaphor was
+   * decorative rather than structural.
+   */
+  --rule: 1.7rem;
 }
 
 /*
@@ -32,7 +43,7 @@
  * sheet read at a desk lamp after dark, so it stays a paper world (ruled
  * lines, stamped headers, the same two accent colors) rather than switching
  * material families — but the ground is a cool charcoal board, not a dark
- * tint of the light palette's kraft. See DESIGN.md, Colors.
+ * tint of the light palette's paper. See DESIGN.md, Colors.
  */
 @media (prefers-color-scheme: dark) {
   :root {
@@ -79,7 +90,7 @@ body {
   color: var(--ink);
   font-family: var(--font-ui);
   font-size: 16px;
-  line-height: 1.55;
+  line-height: var(--rule);
   text-rendering: optimizeLegibility;
 }
 
@@ -123,17 +134,17 @@ h4 {
 
 h2 {
   font-size: 1.375rem;
-  margin: 2rem 0 0.75rem;
+  margin: calc(var(--rule) * 2) 0 calc(var(--rule) * 0.5);
 }
 
 h3 {
   font-size: 1.125rem;
-  margin: 1.75rem 0 0.6rem;
+  margin: var(--rule) 0 calc(var(--rule) * 0.5);
 }
 
 h4 {
   font-size: 1rem;
-  margin: 1.25rem 0 0.5rem;
+  margin: var(--rule) 0 calc(var(--rule) * 0.5);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 600;
@@ -220,9 +231,9 @@ input[type='checkbox'] {
   column-gap: 2.5rem;
   background: repeating-linear-gradient(
     var(--paper) 0,
-    var(--paper) 1.7rem,
-    var(--paper-edge) 1.7rem,
-    var(--paper-edge) calc(1.7rem + 1px)
+    var(--paper) var(--rule),
+    var(--paper-edge) var(--rule),
+    var(--paper-edge) calc(var(--rule) + 1px)
   );
   border: 1px solid var(--paper-edge);
   border-radius: 0.3rem;
@@ -519,6 +530,7 @@ legend {
 .vr-status,
 .creature-state {
   font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
   padding: 0.6rem 0.85rem 0.7rem;
   background: var(--paper-deep);
   border: 1px solid var(--paper-edge);
@@ -526,14 +538,152 @@ legend {
   border-radius: 0.3rem;
 }
 
+/*
+ * These boxes sit directly above the delivery target, and their text swaps
+ * between one line and several as the round progresses. Reserving two lines
+ * stops the target from moving under the learner's cursor at the exact
+ * moment the prompt window opens — measured at 24.8px, four times in 25
+ * seconds, before the reserve existed.
+ */
+.crf-status,
+.vr-status,
+.creature-state {
+  min-height: calc(var(--rule) * 2 + 1.3rem);
+}
+
+/*
+ * The recency flag appears and disappears every couple of seconds. Holding
+ * its width means the sentence cannot rewrap when it does.
+ */
+.creature-recency {
+  display: inline-block;
+  min-width: 20ch;
+  color: var(--ink-soft);
+}
+
+.creature-recency[data-responded] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 .assessment-hint {
   background: color-mix(in srgb, var(--flag) 22%, var(--paper-deep));
   border-color: color-mix(in srgb, var(--flag) 55%, var(--paper-edge));
 }
 
-.crf-progress,
-.vr-progress {
+/* -- the stopped state ------------------------------------------------- */
+
+/*
+ * The session can stop without being asked — a backgrounded tab, a coaching
+ * checkpoint — so the stop has to read from the trial content itself, not
+ * only from the control margin (which is `position: static` below 50rem and
+ * sits several hundred pixels above the viewport during a round).
+ *
+ * The colour law still applies: this is highlighter yellow, the system's
+ * "attention / due now" accent, and NOT stamp red. Stamp red marks evidence
+ * the event log has earned (a demonstrated reinforcer, a detected burst);
+ * a pause is a state needing attention, which is exactly what the flag is
+ * for. See DESIGN.md, The Earned-Color Rule.
+ */
+.paused-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin: 0.75rem 0;
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--flag) 22%, var(--paper-deep));
+  border: 1px solid color-mix(in srgb, var(--flag) 55%, var(--paper-edge));
+  border-bottom: 1px dotted var(--pencil);
+  border-radius: 0.4rem;
+}
+
+/*
+ * The stamped condition mark, the same device the round headers use — a
+ * data sheet stamps the sheet when the session stops, it does not tint a
+ * card. Shape carries the state as well as colour, so it survives greyscale.
+ */
+.paused-notice::before {
+  content: 'PAUSED';
+  flex: none;
+  align-self: flex-start;
+  padding: 0.2rem 0.6rem;
   font-family: var(--font-data);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--flag-ink);
+  background: var(--flag);
+  border: 2px solid var(--flag-ink);
+  border-radius: 0.3rem;
+  transform: rotate(-1.25deg);
+}
+
+.paused-notice-text {
+  flex: 1 1 18ch;
+  margin: 0;
+  max-width: none;
+  font-family: var(--font-data);
+  font-size: 0.9rem;
+  color: var(--flag-ink);
+}
+
+.paused-resume {
+  flex: none;
+}
+
+/*
+ * Pausing drains the colour from the ledger. The sheet is near-monochrome
+ * already, so the one thing this actually desaturates is the single
+ * saturated element in the trial area — the delivery target — which is
+ * precisely the control that has stopped working. Luminance is preserved,
+ * so text contrast is unaffected; the filter is scoped to `main` rather
+ * than the shell because a filter would otherwise create a containing block
+ * and break the control margin's `position: sticky`.
+ */
+.app-shell[data-paused] > main {
+  filter: grayscale(0.9);
+}
+
+/*
+ * A paused session emits no responses, so a delivery could only ever be
+ * classified noncontingent and counted against the learner. The core
+ * rejects it; this is the same refusal, made visible before it is pressed.
+ */
+.delivery-target[aria-disabled='true'] {
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+  border-color: var(--paper-deep);
+  outline-color: var(--pencil);
+  box-shadow: 0 4px 0 var(--paper-edge);
+  cursor: default;
+}
+
+.delivery-target[aria-disabled='true']:hover {
+  background: var(--paper-deep);
+}
+
+.delivery-target[aria-disabled='true']:active {
+  transform: none;
+  box-shadow: 0 4px 0 var(--paper-edge);
+}
+
+/* The standing toggle carries the state too, not just its own label. */
+.session-pause[aria-pressed='true'] {
+  background: var(--flag);
+  color: var(--flag-ink);
+  border-color: var(--flag-ink);
+}
+
+.session-pause[aria-pressed='true']:hover {
+  background: color-mix(in srgb, var(--flag) 80%, var(--flag-ink));
+}
+
+.crf-progress,
+.vr-progress,
+.extinction-remaining {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
   font-size: 0.9rem;
   color: var(--ink-soft);
 }
@@ -584,10 +734,20 @@ legend {
 
 /* -- tables: the ledger ------------------------------------------------ */
 
+/*
+ * Focusable because it scrolls: a horizontally scrolling region that cannot
+ * be reached by keyboard traps its content for anyone not using a pointer.
+ * Caught by axe as `scrollable-region-focusable` at 375px.
+ */
 .table-scroll {
   max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll:focus-visible {
+  outline: 3px solid var(--ballpoint);
+  outline-offset: 2px;
 }
 
 table {
@@ -651,13 +811,13 @@ details summary:hover {
   background:
     repeating-linear-gradient(
       0deg,
-      transparent 0 1.4rem,
-      rgb(var(--shadow-color) / 0.06) 1.4rem calc(1.4rem + 1px)
+      transparent 0 var(--rule),
+      rgb(var(--shadow-color) / 0.06) var(--rule) calc(var(--rule) + 1px)
     ),
     repeating-linear-gradient(
       90deg,
-      transparent 0 1.4rem,
-      rgb(var(--shadow-color) / 0.06) 1.4rem calc(1.4rem + 1px)
+      transparent 0 var(--rule),
+      rgb(var(--shadow-color) / 0.06) var(--rule) calc(var(--rule) + 1px)
     ),
     var(--paper);
   border: 1px solid var(--paper-edge);
@@ -674,6 +834,11 @@ details summary:hover {
 .chart svg {
   display: block;
   max-width: 100%;
+}
+
+.chart svg text {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
 }
 
 .chart-text-summary {
