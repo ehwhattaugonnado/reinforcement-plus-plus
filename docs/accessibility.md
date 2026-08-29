@@ -49,6 +49,13 @@ axe violations running and paused in both light and dark schemes:
   a round. Its `<legend>` elements are visually hidden rather than removed:
   each radio group is still named for assistive technology.
 
+These are regression-tested rather than remembered: `tests/e2e/a11y.spec.ts`
+runs axe at 1440px and 375px, running and paused, in both colour schemes, and
+`tests/e2e/layout.spec.ts` asserts that pause stays on screen through a round
+and that the fixed bar never covers the end of the sheet. The unit-level axe
+helper disables `color-contrast` because jsdom cannot compute it, so the
+end-to-end pass is the only contrast check in the project.
+
 Outstanding for the release review: `aria-disabled` buttons render `--pencil`
 on `--paper` at 3.14:1 (issue #11), and chart axis text is illegible at small
 viewports (issue #1).

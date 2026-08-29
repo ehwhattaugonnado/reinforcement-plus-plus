@@ -52,7 +52,7 @@ status is:
 | 5 — VR-3 | Complete | The original exact-seeded-per-cycle design shipped but proved unplayable by a live human tester: nothing communicates a hidden per-delivery target, so a reasonable delivery could be rejected. Replaced per [ADR 0010](adr/0010-vr-fidelity-as-running-average.md) with a session-wide running-average tolerance (seeded phantom prior, no floor): `classifyVrDelivery` (vr.ts) judges each delivery against the hypothetical average it would produce, and a fixed-ratio-in-disguise check (`not-variable`) excludes a repeated identical gap from credit. `stimulus-delivered` now carries `schedule: 'CRF' \| 'VR' \| null`, stamped at commit time. VR no longer emits `criterion-met`/`criterion-missed`/`cycle-abandoned` — there is no discrete "due" instant under a no-floor average model. The guided UI exposes response count, running average, and a trial-by-trial reinforcement-history table (`vrTrialHistory`), not a nonexistent eligibility cue. |
 | 6 — Extinction/evidence | Complete | Event-derived reinforcer-evidence and burst-detection rules are tested, including asymmetric sample-count floors and a calibrated 90s detection window; `learning.ts` has a real seeded extinction-transition burst term, live extinction responses append withheld VR criteria, the round lasts 150 simulated seconds, and `finishSession()` handles both skip and completion transitions. The observational UI withholds delivery and exposes completion. |
 | 7 — Debrief/charts | Partial | Shared chart-data projectors and accessible visx chart views are tested and wired into Advanced-mode training. A basic shared debrief presents event-derived reinforcer/extinction conclusions in both modes and Advanced charts. The complete mode-neutral summary (assessment accuracy, fidelity, latency/errors, CRF/VR trends, and satiation), conclusion-parity tests, and removal of app-layer default-config reads remain. |
-| 8 — Release hardening | Not started | Playwright currently covers shell smoke, controls, keyboard operation, and an automated axe pass, not the complete learner journey. The 2026-08-29 UI/UX passes (2.1.1, 2.1.2) closed a batch of interaction defects and added component coverage; the end-to-end journey suite, the release contrast review (2.1.3, #11) and chart legibility (#1) are still outstanding. |
+| 8 — Release hardening | Not started | Playwright covers shell smoke, controls, keyboard operation, layout/hit-testing across the responsive band, and axe in both colour schemes running and paused — but not the complete learner journey. The 2026-08-29 UI/UX passes (2.1.1, 2.1.2) closed a batch of interaction defects and added component coverage; the end-to-end journey suite, the release contrast review (2.1.3, #11) and chart legibility (#1) are still outstanding. |
 
 ### 2.1.1 UI/UX defect pass (2026-08-29)
 
@@ -179,6 +179,17 @@ layout constant that depends on the viewport *and* on copy the simulation
 chooses cannot be predicted, and the unit suite is green through every one of
 those failures. `docs/testing-strategy.md`, "Layout and presentation
 defects," now carries the practice.
+
+**The harness was kept.** The scripts that found these defects were throwaway
+files; they are `tests/e2e/layout.spec.ts` and `tests/e2e/a11y.spec.ts` now,
+run by `npm run test:e2e` and by `npm run test:e2e:layout`. The end-to-end
+suite went from 4 tests to 16. Formalising them immediately paid for itself:
+`a11y.spec.ts` found a dark-mode contrast failure the ad-hoc script had
+missed (the pressed Resume button's *hover* fill, 3.7:1, visible only while
+the pointer rests on it), fixed by giving the flag a per-scheme
+`--flag-hover` that deepens on paper white and lifts on a dark ground rather
+than mixing toward the ink in both. The reserve assertions were
+mutation-checked: restoring the old static value fails three of them.
 
 ### 2.1.3 Outstanding UI/UX work
 

@@ -1,13 +1,6 @@
 import type { SimSession, SessionState } from '../../sim'
 import type { Mode } from '../hooks/useMode'
-import type { PauseReason } from '../hooks/useSimState'
-
-/** What stopped the session, in the learner's words. */
-const PAUSE_REASON_TEXT: Record<PauseReason, string> = {
-  away: 'Paused because you left this tab.',
-  coaching: 'Paused for a coaching checkpoint.',
-  user: 'Paused.',
-}
+import { PAUSE_REASON_TEXT, type PauseReason } from './pause-copy'
 
 /**
  * Timing and presentation controls. These stay available in every phase so a

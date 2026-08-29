@@ -7,9 +7,13 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { createSession, type SessionState, type SimSession } from '../../sim'
+import type { PauseReason } from '../components/pause-copy'
 
-/** Why the session is currently stopped, for the shell's paused treatment. */
-export type PauseReason = 'away' | 'coaching' | 'user'
+// The reason vocabulary and its wording live together in `pause-copy.ts`,
+// which has no imports so the end-to-end project can read the strings
+// without pulling in the simulation core. Re-exported here because this is
+// where the reason is derived, and where every consumer already looks.
+export type { PauseReason } from '../components/pause-copy'
 
 /**
  * Presentation cadence for the snapshot bridge, in simulated milliseconds.

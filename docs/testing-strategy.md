@@ -76,6 +76,10 @@ where a mode difference matters most.
 
 ## Layout and presentation defects
 
+`tests/e2e/layout.spec.ts` and `tests/e2e/a11y.spec.ts` own this. Run them
+with `npm run test:e2e:layout` (they are also part of `npm run test:e2e`).
+
+
 A class of defect in this app is invisible to both suites above: jsdom has no
 layout, and a passing assertion says nothing about where an element actually
 sits. Every UI/UX defect found in the 2026-08-29 passes (`docs/roadmap.md`
@@ -98,5 +102,34 @@ the two ends. Two lessons paid for:
   a measurement depends on copy the simulation chooses, drive every branch of
   that copy.
 
-Run axe in both colour schemes. Dark mode has its own palette, so a contrast
-regression there is invisible to a light-mode-only pass.
+Run axe in both colour schemes, running *and* paused. Dark mode has its own
+palette, so a contrast regression there is invisible to a light-mode-only
+pass, and the unit-level axe helper disables `color-contrast` outright because
+jsdom cannot compute it — `a11y.spec.ts` is the only place contrast is checked
+at all. The paused state is a separate case because it introduces the
+highlighter wash, an `aria-disabled` delivery target, and a filter over the
+ledger, none of which exist while the session runs. Two contrast defects were
+found exactly this way, one of them only while the pointer rested on the
+control.
+
+### What these suites cover
+
+- **The reserve for anything fixed over the sheet** covers it at every width
+  in the band, and under every message the component can show. The pause
+  messages are read from `PAUSE_REASON_TEXT`, so a new pause reason is covered
+  automatically rather than remembered; `pause-copy.ts` is kept
+  dependency-free so the end-to-end project can import it without pulling in
+  the simulation core.
+- **Hit-testability**, by `elementFromPoint` *and* a real click. Geometry
+  alone missed the original defect: the next-round button's own rect looked
+  correct while the bar intercepted the click.
+- **No sideways page scroll** at each width in the band.
+- **Pause on screen** after scrolling to the end of a round at 375px, which is
+  the accessibility requirement that the old static positioning broke.
+- **Focus order** reaching the task before the controls, one test per width
+  with a freshly loaded document, since a Tab press depends on what the page
+  last focused.
+
+When you change any of this, check the test still bites: break the value the
+test guards and confirm it fails. Reverting the reserve to its old static
+value fails three of these, including the interception case.

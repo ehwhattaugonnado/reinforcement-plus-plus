@@ -20,6 +20,7 @@
     "test:watch": "vitest",
     "test:sim": "vitest run src/sim",
     "test:e2e": "playwright test",
+    "test:e2e:layout": "playwright test tests/e2e/layout.spec.ts tests/e2e/a11y.spec.ts",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test"
   },
   "dependencies": {

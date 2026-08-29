@@ -14,6 +14,9 @@
   --ink-soft: #52585f; /* secondary text, tinted from ink, never flat gray */
   --pencil: #8b929b; /* provisional / not-yet-recorded marks */
   --flag: #e8b93a; /* highlighter yellow — attention, "due now" */
+  --flag-hover: #d9a92b; /* the flag under a pointer: deepened on paper white,
+                            lifted on a dark ground, so the ink on top always
+                            gains contrast rather than losing it */
   --flag-ink: #3b2e05; /* text set on top of a flag highlight, including
                           the 80/20 flag-ink mix on the pressed Resume
                           button, which is the darkest ground it lands on */
@@ -64,6 +67,7 @@
     --ink-soft: #a8adb5;
     --pencil: #6b7178;
     --flag: #e8b93a;
+    --flag-hover: #f2ce62;
     --flag-ink: #2a2005;
     --ballpoint: #86a4e8;
     --ballpoint-deep: #b3c6f2;
@@ -695,7 +699,7 @@ legend {
 }
 
 .session-pause[aria-pressed='true']:hover {
-  background: color-mix(in srgb, var(--flag) 80%, var(--flag-ink));
+  background: var(--flag-hover);
 }
 
 .crf-progress,

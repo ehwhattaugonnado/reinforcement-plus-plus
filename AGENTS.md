@@ -47,7 +47,7 @@ Keep these documents consistent when a product or architecture decision changes.
 
 - Write deterministic Vitest coverage for simulation rules, replay, derived metrics, known burst/no-burst seeds, time-step invariance, and the central causal invariant.
 - Use tolerant cohort/property assertions for probabilistic behavior; do not require every seed to produce an idealized curve.
-- Use React Testing Library for UI integration and a small end-to-end suite for the complete required path, mode switching, timing controls, background pausing, and accessibility behavior.
+- Use React Testing Library for UI integration and a small end-to-end suite for the complete required path, mode switching, timing controls, background pausing, and accessibility behavior. Every screen that renders conclusions carries its own axe assertion in both presentation modes.
 - Meet WCAG 2.2 AA expectations: keyboard/pointer/touch operation, large delivery target, non-color status cues, reduced motion, textual state announcements, and table/text alternatives for every graph.
 - Keep focus order in reading order: the task comes before the timing and presentation controls, at every width. Pause must stay reachable throughout a timed round without hunting back up the page, and anything fixed over the sheet must reserve its own height so it never covers the end of a round. Measure that height at runtime rather than predicting it when it depends on the viewport or on copy the simulation chooses (`useReservedHeight`); a predicted reserve was wrong three times.
 - Verify layout, hit-testing, and contrast in a real browser, not only in jsdom. Measure the specific number a change controls, at widths inside each breakpoint band rather than only at its ends, under the longest copy the simulation can produce, and run axe in both colour schemes. See `docs/testing-strategy.md`, "Layout and presentation defects."
@@ -61,4 +61,16 @@ Keep these documents consistent when a product or architecture decision changes.
 - Make the smallest change that satisfies the documented requirement; prefer discriminated unions and typed invalid-command results that append no partial event.
 - Add or update tests with behavioral changes, and update documentation when assumptions, event shapes, metrics, config defaults, or scope change.
 - Do not commit `docs/ref/`; it contains local copyrighted reference material and is intentionally ignored.
-- Use npm and the committed `package-lock.json`; do not introduce a second lockfile. Before handoff, run `npm run check`, `npm run build`, and relevant Playwright tests, and report any unavailable or manual checks.
+- Use npm and the committed `package-lock.json`; do not introduce a second lockfile.
+
+### Before handoff
+
+Run all of these and report any that were unavailable or had to be done by hand:
+
+1. `npm run check` — format, lint, typecheck, unit and component tests.
+2. `npm run build`.
+3. `npm run test:e2e` — the full Playwright suite. It builds and serves the app itself.
+   - `npm run test:e2e:layout` is the subset that measures layout, hit-testing, and contrast in a real browser (`tests/e2e/layout.spec.ts`, `tests/e2e/a11y.spec.ts`). Any change that moves, sizes, fixes, or overlays anything must run it; jsdom has no layout engine, so the unit suite passes whether an element is on screen, off screen, or underneath another one.
+4. If you changed a layout constant or added an assertion to those suites, confirm the test bites: break the value it guards and check that it fails.
+
+Do not add a measurement script outside these suites. The scripts that found the 2026-08-29 defects were throwaway files nobody would have run again; they are `tests/e2e/layout.spec.ts` now, and a new measurement belongs there as an assertion.
