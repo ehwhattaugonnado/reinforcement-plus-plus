@@ -7,6 +7,7 @@ import {
 } from '../../sim'
 import { CumulativeRecordChart, ResponseRateChart } from '../charts'
 import type { Mode } from '../hooks/useMode'
+import { debriefClosing } from './debrief-closing'
 
 export function DebriefScreen({
   state,
@@ -61,18 +62,20 @@ export function DebriefScreen({
         substitute for individualized assessment by a qualified professional.
       </p>
 
-      {mode === 'advanced' ? (
+      {/* Both modes close on the same derived line. Advanced adds the charts
+          and their data tables — a difference in detail, not in what the
+          session concluded (ADR 0004, Product Principle 3). */}
+      <p className="debrief-closing">
+        {debriefClosing(result, state.creature.name)}
+      </p>
+
+      {mode === 'advanced' && (
         <section aria-labelledby="debrief-details-heading">
           <h3 id="debrief-details-heading">Advanced evidence details</h3>
           <p>{result.totalResponses} response events were recorded.</p>
           <CumulativeRecordChart data={result.cumulativeRecord} />
           <ResponseRateChart data={result.responseRates} />
         </section>
-      ) : (
-        <p>
-          Switch to Advanced detail to inspect rates, graphs, and their data
-          tables.
-        </p>
       )}
     </section>
   )

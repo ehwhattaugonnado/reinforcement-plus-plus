@@ -9,9 +9,10 @@ colors:
   ink-soft: '#52585f'
   pencil: '#8b929b'
   flag: '#e8b93a'
-  flag-ink: '#4a3a0a'
+  flag-ink: '#3b2e05'
   ballpoint: '#2f4f8f'
   ballpoint-deep: '#22396b'
+  ballpoint-shadow: '#22396b'
   stamp: '#a4372a'
 typography:
   display:
@@ -176,7 +177,9 @@ flow.
 **The Earned-Color Rule.** Stamp red only ever marks something the event
 log has actually evidenced (a recorded selection, a demonstrated
 reinforcer, a detected burst). It never marks a generic warning or a
-merely-selected-but-unconfirmed state — that is ballpoint blue's job.
+merely-selected-but-unconfirmed state — that is ballpoint blue's job. Nor
+does it mark chrome: the wordmark's dot is drawn in ballpoint, because
+letterhead is on screen from first paint, before a single event exists.
 
 ## Typography
 
@@ -239,10 +242,22 @@ single-column layout capped at `46rem` — on any laptop-or-wider viewport
 it left most of the frame as empty backdrop and pushed the standing
 controls into the vertical scroll of the trial content itself.
 
+`SessionControls` sits *after* `<main>` in the DOM and is placed into the
+margin by `grid-area`. Rendered first, it made Pause the document's first
+focusable element on every screen, and put keyboard focus in the right-hand
+margin before the left-hand ledger. Grid placement keeps the margin on the
+right while focus follows reading order.
+
 **Breakpoints:**
-- **`50rem`:** the control margin no longer has room beside the ledger; the
-  grid collapses to one column (`header` / `rail` / `main`, in that
-  reading order) and the margin becomes statically positioned again.
+- **`50rem`:** the control margin no longer has room beside the ledger. The
+  grid collapses to one column (`header` / `main`) and the controls become a
+  fixed bar along the bottom edge — last in reading order, last in focus
+  order, and always on screen. Stacking them *above* the task made a
+  preferences box the first thing a cold visitor met, and leaving them
+  statically positioned let pause and speed scroll away mid-round.
+  `--control-bar-h` reserves the bar's height in the sheet's bottom padding;
+  it is sized for the bar's tallest arrangement, not per breakpoint, because
+  the end of a round is exactly the content a short reserve hides.
 - **`36rem`:** the sheet loses its radius and outer margin and becomes
   edge-to-edge (the clipboard fills the viewport rather than floating on a
   desk), and the delivery-target/round-action buttons go full width.
@@ -277,10 +292,14 @@ desk, not a card floating in a design system.
   28px -14px rgb(var(--shadow-color) / 0.35)`): the `.app-shell` only.
 - **Clip drop** (`0 3px 6px -2px rgb(var(--shadow-color) / 0.4)`): the
   clipboard clip hardware only.
-- **Stamp press** (`0 4px 0 var(--ballpoint-deep)`, compressing to `0 1px
+- **Stamp press** (`0 4px 0 var(--ballpoint-shadow)`, compressing to `0 1px
   0` on press with a `translateY` shift): a deliberate, singular
   exception to the soft-shadow rule above, scoped to `.delivery-target`
-  only — see Named Rules.
+  only — see Named Rules. The shadow uses its own token, not the hover
+  fill: `--ballpoint-shadow` is always *darker* than the button face, while
+  `--ballpoint-deep` moves toward higher contrast against its ground, which
+  on a dark scheme means lighter. Sharing one token rendered the stamp lit
+  from below in dark mode.
 
 ### Named Rules
 **The One Hard Shadow Rule.** The flat, zero-blur `0 4px 0` stamp shadow
@@ -380,9 +399,11 @@ justification beyond habit.
 
 The session can stop *without being asked* — a backgrounded tab, or one of
 the two automatic coaching checkpoints — so a stop has to read from the
-trial content, not only from the control margin, which goes `position:
-static` below `50rem` and sits several hundred pixels above the viewport
-during a round.
+trial content, not only from the control margin. (When this rule was
+written the margin went `position: static` below `50rem` and sat several
+hundred pixels above the viewport during a round; it is a fixed bottom bar
+there now, but the rule stands on its own — a stop belongs where the work
+is.)
 
 - **`.paused-notice`:** a Status Field variant carrying the highlighter wash,
   a rotated `PAUSED` stamp mark (`::before`, the same device as the Stamped

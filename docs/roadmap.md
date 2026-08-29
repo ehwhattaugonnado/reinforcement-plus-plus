@@ -105,6 +105,55 @@ container (14.25px at 1440px, 6.23px at 375px). The fix is a
 container-driven viewBox, not a CSS tweak; the accessible text summary and
 data table carry the same facts meanwhile.
 
+### 2.1.2 Polish pass (2026-08-29)
+
+The defect pass's remaining findings were tracked as GitHub issues #1-#15.
+This pass closed #2, #3, #4, #5, #6, #7, #8, #12 and #13:
+
+- **The control margin came before the task in DOM and focus order** (#4).
+  Pause was the document's first focusable element on every screen, so one
+  Tab from a cold start landed on it and Space stopped a session the learner
+  had not begun. `SessionControls` now renders after `<main>` and is placed
+  by `grid-area`, so focus follows reading order at every width.
+- **Below 50rem the margin stacked above the task and scrolled away** (#3).
+  A learner arriving cold met a preferences box, and pause and speed left
+  the viewport mid-round (the panel's bottom edge measured 148px, then
+  671px, above the viewport at 375px), against the
+  [accessibility](accessibility.md) requirement that they stay available
+  through a timed round. It is now a fixed bar on the bottom edge, its
+  legends visually hidden so the bar stays two rows on a phone.
+  `--control-bar-h` reserves its height in the shell's bottom padding; sized
+  for the bar's tallest arrangement, because a reserve tuned per breakpoint
+  left the band just above 576px short by 24px, with the end of the ledger
+  under the bar.
+- **The Advanced live view dumped the whole event log** (#2). It reached a
+  4,698px page mid-CRF and pushed the delivery target off screen.
+  `EventLogTable` takes an optional `limit` — the training screen passes 10,
+  newest first, with the true log position in the `#` column and the full
+  count named in the caption. Millisecond floats are rounded for display;
+  the core keeps full precision.
+- **Simple mode's debrief ended by pointing at Advanced** (#8). Both modes
+  now close on the same line derived from `getDebriefSummary()`
+  (`src/app/screens/debrief-closing.ts`); Advanced still adds the charts and
+  their data tables, which is a difference in detail, not in conclusion
+  (ADR 0004). This closes the conclusion-parity defect. Milestone 7's
+  complete mode-neutral summary is still outstanding.
+- **The preference hierarchy hid its ties** (#7). "Rank 1 / Rank 1 / Rank 3"
+  is correct competition ranking, but the skip read as a bug. Ranks now say
+  "(tied)" and a marginal note explains it.
+- **Earned colour and stamp physics** (#13, #5). The letterhead dot was
+  painted in stamp red from first paint, before any evidence existed;
+  it is ballpoint now. `--ballpoint-shadow` split off the hover fill so a
+  stamped control's hard shadow is darker than its face in both themes.
+- Also: the rotated condition headers no longer clip their last glyph (#6),
+  learner-facing prose uses real em dashes (#12), and `--flag-ink` darkened
+  to clear AA on the pressed Resume button's flag/ink mix (4.48:1 before).
+
+Verified in Chromium at 375px, 560px, 580px, 600px, 700px, 799px and 1440px:
+the control bar on screen after scrolling to the bottom, bottom-of-page
+buttons hit-testable and clickable, no horizontal page scroll, and zero axe
+violations running and paused in both light and dark schemes.
+
 The next critical-path increment is completing Milestone 7's shared
 debrief/session summary. The extinction-round contract is 150 simulated seconds,
 anchored by its first live withheld response criterion, with `finishSession()`

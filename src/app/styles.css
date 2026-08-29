@@ -40,9 +40,12 @@
    */
   --rule: 1.7rem;
   /* Height reserved for the fixed control bar below 50rem, so the sheet
-     always scrolls clear of it. Kept in one place: the bar and the space
-     it needs must not drift apart. */
-  --control-bar-h: 5rem;
+     always scrolls clear of it. Kept in one place: the bar and the space it
+     needs must not drift apart. Sized for the bar's tallest arrangement
+     (three rows, measured at 126.6px on a 375px viewport) rather than per
+     breakpoint — a reserve tuned to one width left the band just above
+     576px, where the bar is 104px, short by 24px.  */
+  --control-bar-h: 8.5rem;
 }
 
 /*
@@ -964,10 +967,6 @@ details summary:hover {
 
 @media (max-width: 36rem) {
   .app-shell {
-    /* The bar needs a third row at this width (the two radio groups no
-       longer sit beside the pause button), so reserve more. */
-    --control-bar-h: 8.5rem;
-
     margin: 1.25rem auto;
     padding: 1.5rem 1.25rem var(--control-bar-h);
     border-radius: 0;

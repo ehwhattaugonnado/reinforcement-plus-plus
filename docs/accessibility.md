@@ -31,6 +31,28 @@ accessibility-relevant defects, each verified in Chromium at 1440px and
   wrappers carry `tabIndex`, a group role, and a name (axe
   `scrollable-region-focusable`, WCAG 2.1.1).
 
+The follow-up polish pass (`docs/roadmap.md` §2.1.2) closed two more, verified
+in Chromium at 375px, 560px, 580px, 600px, 700px, 799px and 1440px with zero
+axe violations running and paused in both light and dark schemes:
+
+- **Focus order follows reading order.** `SessionControls` rendered before
+  `<main>`, so Pause was the document's first focusable element on every
+  screen: one Tab from a cold start focused it and Space stopped a session
+  the learner had not begun — a third path to an unintended stop, on a
+  product that already pauses itself. Visual and focus order also disagreed
+  at >=50rem, where the margin sits on the right. The controls now render
+  after `<main>` and are placed by `grid-area`.
+- **Pause and speed no longer leave the viewport below 50rem.** The margin
+  was `position: static` there, so both scrolled away mid-round, against the
+  requirement below. It is a fixed bar on the bottom edge now, with its
+  height reserved in the sheet's bottom padding so it never covers the end of
+  a round. Its `<legend>` elements are visually hidden rather than removed:
+  each radio group is still named for assistive technology.
+
+Outstanding for the release review: `aria-disabled` buttons render `--pencil`
+on `--paper` at 3.14:1 (issue #11), and chart axis text is illegible at small
+viewports (issue #1).
+
 Known residual: chart axis text scales with its container (14.25px at
 1440px, 6.23px at 375px). The charts are `aria-hidden` decoration over a
 text summary and data table derived from the same chart-data object, so no
