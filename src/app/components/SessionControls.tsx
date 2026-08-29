@@ -17,12 +17,15 @@ const PAUSE_REASON_TEXT: Record<PauseReason, string> = {
  * windows; mode is not (ADR 0004).
  */
 export function SessionControls({
+  rootRef,
   state,
   session,
   mode,
   onModeChange,
   pauseReason,
 }: {
+  /** Lets the shell measure the bar so layout can reserve its height. */
+  rootRef?: ((node: HTMLDivElement | null) => void) | undefined
   state: SessionState
   session: SimSession
   mode: Mode
@@ -32,7 +35,7 @@ export function SessionControls({
   const elapsedSeconds = Math.round(state.elapsedSimMs / 1000)
 
   return (
-    <div className="session-controls">
+    <div className="session-controls" ref={rootRef}>
       <button
         type="button"
         className="session-pause"
@@ -42,6 +45,10 @@ export function SessionControls({
         {state.paused ? 'Resume' : 'Pause'}
       </button>
 
+      {/* The labels carry the unit ("1x speed", not "1x") because below
+          50rem the legends are visually hidden to keep the control bar two
+          rows tall. A programmatic-only group name would leave a sighted
+          learner two unexplained numbers beside Simple/Advanced. */}
       <fieldset>
         <legend>Speed</legend>
         {([1, 0.5] as const).map((speed) => (
@@ -52,7 +59,7 @@ export function SessionControls({
               checked={state.speed === speed}
               onChange={() => void session.setSpeed(speed)}
             />
-            {speed}&times;
+            {speed}&times; speed
           </label>
         ))}
       </fieldset>

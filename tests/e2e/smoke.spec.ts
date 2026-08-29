@@ -36,7 +36,7 @@ test('pause and speed are operable and announced textually', async ({
   await page.getByRole('button', { name: /pause/i }).click()
   await expect(sessionStatus(page)).toContainText(/paused/i)
 
-  await page.getByRole('radio', { name: '0.5×' }).check()
+  await page.getByRole('radio', { name: '0.5× speed' }).check()
   await expect(sessionStatus(page)).toContainText('0.5')
 })
 

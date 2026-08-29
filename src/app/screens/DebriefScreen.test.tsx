@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { expectNoAxeViolations } from '../../../tests/setup/axe'
 import { createSession } from '../../sim'
 import { DebriefScreen } from './DebriefScreen'
 
@@ -73,6 +74,23 @@ describe('DebriefScreen', () => {
     expect(closing).toMatch(/nothing is saved/i)
     // No raw milliseconds, event ids, or unrounded floats (AGENTS.md).
     expect(closing).not.toMatch(/\bms\b|response-\d|\d\.\d{3}/)
+  })
+
+  it('has no automatically detectable accessibility violations in either mode', async () => {
+    const { state, session } = debriefFixture()
+
+    const simple = render(
+      <DebriefScreen state={state} session={session} mode="simple" />,
+    )
+    await expectNoAxeViolations(simple.container)
+    simple.unmount()
+
+    // Advanced adds the charts and their data tables, which is where the
+    // table/text-alternative and scrollable-region requirements live.
+    const advanced = render(
+      <DebriefScreen state={state} session={session} mode="advanced" />,
+    )
+    await expectNoAxeViolations(advanced.container)
   })
 
   it('states the educational boundary and does not invent an extinction result when skipped', () => {

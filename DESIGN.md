@@ -255,9 +255,10 @@ right while focus follows reading order.
   order, and always on screen. Stacking them *above* the task made a
   preferences box the first thing a cold visitor met, and leaving them
   statically positioned let pause and speed scroll away mid-round.
-  `--control-bar-h` reserves the bar's height in the sheet's bottom padding;
-  it is sized for the bar's tallest arrangement, not per breakpoint, because
-  the end of a round is exactly the content a short reserve hides.
+  `--control-bar-h` reserves the bar's height in the sheet's bottom padding,
+  measured at runtime rather than predicted — the bar's height depends on the
+  viewport *and* on which pause message the simulation is showing, and the
+  end of a round is exactly the content a short reserve hides.
 - **`36rem`:** the sheet loses its radius and outer margin and becomes
   edge-to-edge (the clipboard fills the viewport rather than floating on a
   desk), and the delivery-target/round-action buttons go full width.

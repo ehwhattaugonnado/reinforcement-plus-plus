@@ -1009,3 +1009,16 @@ details summary:hover {
   padding-left: 0.75rem;
   border-left: 2px solid var(--paper-edge);
 }
+
+/*
+ * The debrief's closing line. Both modes end here (ADR 0004), so it reads as
+ * the last thing said rather than a trailing note: sheet voice, on the rule
+ * grid, set apart by space and a rule above rather than by a box.
+ */
+.debrief-closing {
+  max-width: 62ch;
+  margin: calc(var(--rule) * 1.5) 0 0;
+  padding-top: calc(var(--rule) * 0.5);
+  border-top: 1px solid var(--paper-edge);
+  font-weight: 500;
+}

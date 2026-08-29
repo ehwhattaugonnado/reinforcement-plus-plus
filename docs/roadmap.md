@@ -122,10 +122,13 @@ This pass closed #2, #3, #4, #5, #6, #7, #8, #12 and #13:
   [accessibility](accessibility.md) requirement that they stay available
   through a timed round. It is now a fixed bar on the bottom edge, its
   legends visually hidden so the bar stays two rows on a phone.
-  `--control-bar-h` reserves its height in the shell's bottom padding; sized
-  for the bar's tallest arrangement, because a reserve tuned per breakpoint
-  left the band just above 576px short by 24px, with the end of the ledger
-  under the bar.
+  `--control-bar-h` reserves its height in the shell's bottom padding, and
+  that reserve is *measured*, not predicted (`useReservedHeight`): a static
+  value was wrong three times running — once per breakpoint, then again once
+  a longer pause message ("Paused because you left this tab.") wrapped the
+  bar onto a third row and took it to 181px against a 136px reserve. The
+  stylesheet keeps a static value as the fallback for the first paint and for
+  anywhere `ResizeObserver` is unavailable.
 - **The Advanced live view dumped the whole event log** (#2). It reached a
   4,698px page mid-CRF and pushed the delivery target off screen.
   `EventLogTable` takes an optional `limit` — the training screen passes 10,
@@ -151,8 +154,10 @@ This pass closed #2, #3, #4, #5, #6, #7, #8, #12 and #13:
 
 Verified in Chromium at 375px, 560px, 580px, 600px, 700px, 799px and 1440px:
 the control bar on screen after scrolling to the bottom, bottom-of-page
-buttons hit-testable and clickable, no horizontal page scroll, and zero axe
-violations running and paused in both light and dark schemes.
+buttons hit-testable and clickable, no horizontal page scroll, the reserve
+tracking the bar to the pixel under each of the three pause messages, and
+zero axe violations running and paused in both light and dark schemes. The
+debrief screen carries its own axe assertion in both modes.
 
 The next critical-path increment is completing Milestone 7's shared
 debrief/session summary. The extinction-round contract is 150 simulated seconds,

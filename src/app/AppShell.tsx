@@ -1,6 +1,7 @@
 import { AssessmentScreen } from './screens/AssessmentScreen'
 import { SessionControls } from './components/SessionControls'
 import { useMode } from './hooks/useMode'
+import { useReservedHeight } from './hooks/useReservedHeight'
 import { useSimState } from './hooks/useSimState'
 import { TrainingScreen } from './screens/TrainingScreen'
 import { DebriefScreen } from './screens/DebriefScreen'
@@ -23,8 +24,15 @@ export function AppShell({ seed }: { seed?: string } = {}) {
   const { state, session, pauseReason } = useSimState(seed)
   const [mode, setMode] = useMode()
 
+  // Below 50rem the controls are a fixed bar over the bottom of the sheet.
+  // Its height depends on the viewport and on which pause message the
+  // simulation is showing, so the space reserved for it is measured rather
+  // than predicted (see `useReservedHeight`).
+  const { containerRef, measuredRef } = useReservedHeight('--control-bar-h')
+
   return (
     <div
+      ref={containerRef}
       className="app-shell"
       // The sheet itself carries the stopped state, so a pause is legible
       // from anywhere on the page rather than only from the control margin
@@ -72,6 +80,7 @@ export function AppShell({ seed }: { seed?: string } = {}) {
        * follows reading order: heading, then the task, then the controls.
        */}
       <SessionControls
+        rootRef={measuredRef}
         state={state}
         session={session}
         mode={mode}
