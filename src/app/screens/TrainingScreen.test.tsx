@@ -220,10 +220,15 @@ describe('TrainingScreen', () => {
           mode="advanced"
         />,
       )
-      const eventTableBefore = screen.getByRole('table', {
-        name: /raw session events/i,
-      })
-      const rowsBefore = eventTableBefore.querySelectorAll('tbody tr').length
+      // The live table is a capped window (newest first), so "it updated"
+      // is the newest row's log position moving, not the row count growing.
+      const newestRowNumber = () =>
+        Number(
+          screen
+            .getByRole('table', { name: /raw session events/i })
+            .querySelector('tbody tr th')?.textContent ?? '0',
+        )
+      const newestBefore = newestRowNumber()
 
       // Tick until at least one new response has been logged. The response
       // process is a seeded hazard with a mean interarrival on the order of
@@ -251,11 +256,7 @@ describe('TrainingScreen', () => {
         />,
       )
 
-      const eventTableAfter = screen.getByRole('table', {
-        name: /raw session events/i,
-      })
-      const rowsAfter = eventTableAfter.querySelectorAll('tbody tr').length
-      expect(rowsAfter).toBeGreaterThan(rowsBefore)
+      expect(newestRowNumber()).toBeGreaterThan(newestBefore)
     })
 
     it('the event table and the charts are derived from the exact same event log', () => {
@@ -267,8 +268,15 @@ describe('TrainingScreen', () => {
       const eventTable = screen.getByRole('table', {
         name: /raw session events/i,
       })
+      // The live view shows the most recent window of the log, and says so,
+      // so a learner can see that nothing has been silently dropped.
       const eventRows = eventTable.querySelectorAll('tbody tr')
-      expect(eventRows).toHaveLength(state.events.length)
+      expect(eventRows.length).toBe(Math.min(state.events.length, 10))
+      if (state.events.length > 10) {
+        expect(
+          eventTable.querySelector('caption')?.textContent ?? '',
+        ).toContain(`of ${state.events.length}`)
+      }
 
       const responseCountInLog = state.events.filter(
         (e) => e.type === 'response-emitted',

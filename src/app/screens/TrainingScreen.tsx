@@ -17,6 +17,13 @@ import type { PauseReason } from '../hooks/useSimState'
 import { rankLabel, tieNote, tiedRanks } from './hierarchy'
 import { COACHING_COPY, deriveCrfCoaching, deriveVrCoaching } from './coaching'
 
+/**
+ * How many recent events the Advanced live view shows during a round. Enough
+ * to see the last few trials in context; short enough that the table never
+ * becomes the page.
+ */
+const LIVE_EVENT_LOG_LIMIT = 10
+
 const SIMPLE_PHASE_COPY: Record<string, string> = {
   baseline: 'First, watch Pip on their own before training begins.',
   crf: 'Now deliver the chosen item after every response.',
@@ -643,7 +650,10 @@ export function TrainingScreen({
           <h3 id="advanced-view-heading">Advanced live view</h3>
           <CumulativeRecordChart data={cumulativeRecordData} />
           <ResponseRateChart data={responseRateData} />
-          <EventLogTable events={state.events} />
+          {/* A live monitor, not the archive: the newest handful of events,
+              so the log cannot push the delivery target off the page
+              mid-round. The debrief renders the complete log. */}
+          <EventLogTable events={state.events} limit={LIVE_EVENT_LOG_LIMIT} />
         </section>
       )}
     </section>
